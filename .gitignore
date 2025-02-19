@@ -1,2 +1,3 @@
 XMLToBitmapConverter/.vscode
 .vscode
+__pycache__/*

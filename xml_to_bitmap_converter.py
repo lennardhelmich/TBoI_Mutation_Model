@@ -1,28 +1,10 @@
 import xml.etree.ElementTree as ET
 import math
 import os
+from tboi_bitmap import EntityType 
+from tboi_bitmap import TBoI_Bitmap
 from PIL import Image
 from enum import Enum
-
-class EntityType(Enum):
-    WALL = 0
-    DOOR = 1
-    FREE_SPACE = 2
-    STONE = 3
-    PIT = 4
-    BLOCK = 5
-    ENTITY = 6
-    PICKUP = 7
-    MACHINE = 8
-    FIRE = 9
-    POOP = 10
-    SPIKE = 11
-
-# Function to evenly assign pixel values with count of different entities
-def get_pixel_value_with_entity_id(entity_id):
-    entity_count = len(EntityType) - 1
-    steps = 255 / entity_count
-    return math.floor(entity_id.value*steps)
 
 # Function to parse the correct simplified EntityType out of TBoI entity_types
 def handle_entity_values(value):
@@ -60,22 +42,21 @@ def convert_xml_to_bitmap(file_path):
         for room in root.findall('room'):
 
             #create Bitmap
-            width, height = 15,9
-            bitmap_image = Image.new('L', (width, height), 0)
+            tboi_bitmap = TBoI_Bitmap()
 
             #Initialize the bitmap of the room with free Spaces
             room_width, room_height = 13,7
             for width_index in range(room_width):
                 for height_index in range(room_height):
-                    bitmap_image.putpixel((width_index+1,height_index+1),get_pixel_value_with_entity_id(EntityType.FREE_SPACE))
-
+                    tboi_bitmap.set_pixel_with_entity_id(width_index+1, height_index+1, EntityType.FREE_SPACE)
+            
             # Handle existing doors
             for door in room.findall('door'):
                 exists = door.get('exists')
                 x = int(door.get('x')) + 1
                 y = int(door.get('y')) + 1
                 if(exists):
-                    bitmap_image.putpixel((x,y),get_pixel_value_with_entity_id(EntityType.DOOR))
+                    tboi_bitmap.set_pixel_with_entity_id(x, y, EntityType.DOOR)
 
             # Handle every single entity
             for spawn in room.findall('spawn'):
@@ -84,12 +65,15 @@ def convert_xml_to_bitmap(file_path):
                 entity = spawn.find('entity')
                 if entity is not None:
                     entity_type = int(entity.get('type'))
-                    bitmap_image.putpixel((x,y),get_pixel_value_with_entity_id(handle_entity_values(entity_type)))
+                    tboi_bitmap.set_pixel_with_entity_id(x,y,handle_entity_values(entity_type))
+            
+            # if(index==5):
+            #     tboi_bitmap.set_pixel_with_entity_id(6,1,EntityType.WALL)
+            #     tboi_bitmap.set_pixel_with_entity_id(7,1,EntityType.WALL)
+            #     tboi_bitmap.set_pixel_with_entity_id(8,1,EntityType.WALL)
 
             # Save bitmap of current room 
-            directory = "Bitmaps"
-            file_path = os.path.join(directory, f"bitmap_{index}.bmp")
-            bitmap_image.save(file_path)
+            tboi_bitmap.save_bitmap_in_folder(index)
 
             # Increase index for bitmap count
             index += 1
