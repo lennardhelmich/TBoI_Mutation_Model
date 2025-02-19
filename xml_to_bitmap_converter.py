@@ -32,7 +32,7 @@ def handle_entity_values(value):
         print("The following entity_type is not defined in BitmapValues : {value}")
 
 #Function to convert a xml with Room Layout Data from basement_renovator into a 8bit bitmap 
-def convert_xml_to_bitmap(file_path):
+def convert_xml_to_bitmap(file_path, save_directory):
     try:
         tree = ET.parse(file_path)
         root = tree.getroot()
@@ -66,14 +66,9 @@ def convert_xml_to_bitmap(file_path):
                 if entity is not None:
                     entity_type = int(entity.get('type'))
                     tboi_bitmap.set_pixel_with_entity_id(x,y,handle_entity_values(entity_type))
-            
-            # if(index==5):
-            #     tboi_bitmap.set_pixel_with_entity_id(6,1,EntityType.WALL)
-            #     tboi_bitmap.set_pixel_with_entity_id(7,1,EntityType.WALL)
-            #     tboi_bitmap.set_pixel_with_entity_id(8,1,EntityType.WALL)
 
             # Save bitmap of current room 
-            tboi_bitmap.save_bitmap_in_folder(index)
+            tboi_bitmap.save_bitmap_in_folder(index, save_directory)
 
             # Increase index for bitmap count
             index += 1
@@ -88,4 +83,4 @@ def convert_xml_to_bitmap(file_path):
 # Example usage
 if __name__ == "__main__":
     xml_file_path = 'Rooms/SecondInputRooms.xml'
-    convert_xml_to_bitmap(xml_file_path)
+    convert_xml_to_bitmap(xml_file_path, "Bitmaps")

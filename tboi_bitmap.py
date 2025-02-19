@@ -21,6 +21,7 @@ class EntityType(Enum):
 
 class TBoI_Bitmap:
 
+# TBoI_Bitmap Constructor with width and height pre-defined and initial bitmap and pathFindingGraph with 0s
     def __init__(self, width=15, height=9):
         self.width = width
         self.height = height
@@ -28,27 +29,27 @@ class TBoI_Bitmap:
         self.pathFindingGraph = [[0 for _ in range(width)] for _ in range(height)]
 
 # Function to evenly assign pixel values with count of different entities
-    def hallo():
-        return 0
-    
     def get_pixel_value_with_entity_id(self, entity_id):
         entity_count = len(EntityType) - 1
         steps = 255 / entity_count
         return math.floor(entity_id.value*steps)
-    
+
+# Function to get EntityType out of given pixel_value
     def get_entity_id_with_pixel_value(self, pixel_value):
         entity_count = len(EntityType) - 1
         steps = 255 / entity_count
         return EntityType(round(pixel_value/steps))
-    
+
+# Function to set a pixel on a given position with the correct Pixel Value of given entity_id
     def set_pixel_with_entity_id(self, x, y, entity_id):
         self.bitmap.putpixel((x,y),self.get_pixel_value_with_entity_id(entity_id))
 
-    def save_bitmap_in_folder(self, index):
-        directory = "Bitmaps"
+# Function to save bitmap in folder for future uses
+    def save_bitmap_in_folder(self, index, directory):
         file_path = os.path.join(directory, f"bitmap_{index}.bmp")
         self.bitmap.save(file_path)
 
+# Function to assign correct values for pathFindingGraph computed out of current bitmap
     def create_graph_out_of_bitmap(self):
         for x in range(self.bitmap.width):
             for y in range(self.bitmap.height):
@@ -58,6 +59,7 @@ class TBoI_Bitmap:
                 if(entity_id == EntityType.WALL or entity_id == EntityType.STONE or entity_id == EntityType.PIT or entity_id == EntityType.BLOCK or entity_id == EntityType.SPIKE):
                     self.pathFindingGraph[y][x] = 1
 
+# Path Finding Algorithm (Breadth-First Search (BFS)) for fitness function
     def is_path_existent(self, start, end):
         if not self.is_within_bounds(start) or not self.is_within_bounds(end):
             print("No path exists because start/end is not within bounds.")
@@ -81,6 +83,7 @@ class TBoI_Bitmap:
         
         return False
 
+# Get all current neighbors for path finding
     def get_neighbors(self, position):
         x, y = position
         neighbors = []
@@ -95,6 +98,7 @@ class TBoI_Bitmap:
         
         return neighbors
 
+# Check if given position is in bounds of graph
     def is_within_bounds(self, position):
         x,y = position
         return 0 <= x < self.width and 0 <= y < self.height
