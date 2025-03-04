@@ -2,6 +2,7 @@ from tboi_bitmap import TBoI_Bitmap
 import math
 from tboi_bitmap import EntityType
 from PIL import Image
+from constants import Constants
 
 class Fitness_Function:
     def __init__(self, startBitmap, resultBitmap):
@@ -91,19 +92,65 @@ class Fitness_Function:
         vertical_score = self.vertical_symmetric_score(width, height, bitmap)
         horizontal_score = self.horizontal_symmetric_score(width, height, bitmap)
         central_score = self.central_symmetric_score(width, height, bitmap)
-        print("Vertical score is : " + str(vertical_score) + "\n" + "Horizontal score is : " + str(horizontal_score) + "\n" + "Central score is : " + str(central_score))
+        return (vertical_score + horizontal_score + central_score)/3
 
 
-    
+    def balance_freespace_and_entities(self):
+        totalCount = 0
+        entityCount = 0
+        bitmap = self.resultBitmap.bitmap
+        for i in range(1,bitmap.height-1):
+            for j in range(1, bitmap.width-1):
+                pixel = bitmap.getpixel((j,i))
+                entity = self.resultBitmap.get_entity_id_with_pixel_value(pixel)
+                totalCount+=1
+                if(entity == EntityType.BLOCK or entity == EntityType.STONE or entity == EntityType.PIT or entity == EntityType.FIRE or entity == EntityType.POOP or entity == EntityType.SPIKE):
+                    entityCount+=1
+
+        percent = (entityCount/totalCount) * 100
+        deviation_of_desired_value = abs(Constants.DESIRED_FREESPACE_ENTITY_RATIO_PERCENT - percent)
+        if(deviation_of_desired_value > Constants.DESIRED_FREESPACE_ENTITY_RATIO_PERCENT):
+            return 0
+        else :
+            return (1-(deviation_of_desired_value/Constants.DESIRED_FREESPACE_ENTITY_RATIO_PERCENT))
+
+    def enemy_difference_value(self):
+        enemy_value = self.resultBitmap.get_pixel_value_with_entity_id(EntityType.ENTITY)
+        enemies_now = list(self.startBitmap.bitmap.getdata()).count(enemy_value)
+        enemies_prev = list(self.resultBitmap.bitmap.getdata()).count(enemy_value)
+        difference = abs(enemies_now-enemies_prev)
+        if(difference <= Constants.MAX_NUMBER_FREE_ENEMY_CHANGES):
+            return 1
+        else:
+            return max(0, 1-(Constants.REDUCTION_PER_ENEMY*(difference-Constants.MAX_NUMBER_FREE_ENEMY_CHANGES)))
+
+    def bitmap_changes(self):
+        list_prev = list(self.startBitmap.bitmap.getdata())
+        list_now = list(self.resultBitmap.bitmap.getdata())
+        total_count = self.resultBitmap.bitmap.width-2 * self.resultBitmap.bitmap.height-2
+        difference_in_pixels = sum(1 for p1, p2 in zip(list_prev, list_now) if p1 != p2)
+        difference_percent = (difference_in_pixels/total_count)*100
+        if(difference_percent > (Constants.TARGETED_BITMAP_DIFFERENCE*2)):
+            return 0
+        else:
+            return (1-(abs(difference_percent-Constants.TARGETED_BITMAP_DIFFERENCE)*(1/Constants.TARGETED_BITMAP_DIFFERENCE)))
+
+    def calc_fitness_function(self):
+        value = 0
+        total_weight = Constants.FITNESS_WEIGHT_BALANCE + Constants.FITNESS_WEIGHT_CHANGES + Constants.FITNESS_WEIGHT_ENEMIES + Constants.FITNESS_WEIGHT_SYMMETRY
+        if(not fitness.check_every_traversability()):
+            self.functionValue = 0
+        else:
+            value = (Constants.FITNESS_WEIGHT_BALANCE * fitness.balance_freespace_and_entities()) + (Constants.FITNESS_WEIGHT_CHANGES * fitness.bitmap_changes()) + (Constants.FITNESS_WEIGHT_ENEMIES * fitness.enemy_difference_value()) + + (Constants.FITNESS_WEIGHT_SYMMETRY * fitness.symmetry_score())
+            standardized_value = value/(total_weight)
+            self.functionValue = standardized_value
+
 
 if __name__ == "__main__":
-    path = "Bitmaps/bitmap_5.bmp"
+    path = "Bitmaps/bitmap_4.bmp"
     bitmap = Image.open(path)
     fitness = Fitness_Function(bitmap, bitmap)
-    if(fitness.check_every_traversability()):
-        print("In Bitmap : " + path + " everything is reachable")
-    else:
-        print("In Bitmap : " + path + " a non-reachable property was found.")
-    fitness.symmetry_score()
+    fitness.calc_fitness_function()
+    print(fitness.functionValue)
 
 
