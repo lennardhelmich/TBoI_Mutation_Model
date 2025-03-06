@@ -103,6 +103,14 @@ class TBoI_Bitmap:
         x,y = position
         return 0 <= x < self.width and 0 <= y < self.height
     
+# 
+    def allowed_room_entities(self):
+        returnList = []
+        for entities in EntityType:
+            if(entities != EntityType.DOOR and entities != EntityType.WALL):
+                returnList.append(self.get_pixel_value_with_entity_id(entities))
+        return returnList
+    
 if __name__ == "__main__":
     tboi_bitmap = TBoI_Bitmap()
     tboi_bitmap.bitmap = Image.open("Bitmaps/bitmap_5.bmp")

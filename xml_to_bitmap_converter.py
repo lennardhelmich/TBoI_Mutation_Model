@@ -14,7 +14,7 @@ def handle_entity_values(value):
         return EntityType.PICKUP
     elif value == 3000:
         return EntityType.PIT
-    elif value == 33:
+    elif value == 33 or value == 1400:
         return EntityType.FIRE
     elif value == 6:
         return EntityType.MACHINE
@@ -29,7 +29,8 @@ def handle_entity_values(value):
     elif 1930 <= value <= 2000:
         return EntityType.SPIKE
     else:
-        print("The following entity_type is not defined in BitmapValues : {value}")
+        valueStr = str(value)
+        print("The following entity_type is not defined in BitmapValues : " + valueStr)
 
 #Function to convert a xml with Room Layout Data from basement_renovator into a 8bit bitmap 
 def convert_xml_to_bitmap(file_path, save_directory):

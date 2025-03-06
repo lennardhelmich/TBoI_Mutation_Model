@@ -3,16 +3,17 @@ import math
 from tboi_bitmap import EntityType
 from PIL import Image
 from constants import Constants
+import numpy as np
 
 class Fitness_Function:
     def __init__(self, startBitmap, resultBitmap):
 
         start_tboi_bitmap = TBoI_Bitmap()
-        start_tboi_bitmap.bitmap = startBitmap
+        start_tboi_bitmap.bitmap = Image.fromarray(np.array(startBitmap,dtype=np.uint8), mode="L")
         start_tboi_bitmap.create_graph_out_of_bitmap()
 
         result_tboi_bitmap = TBoI_Bitmap()
-        result_tboi_bitmap.bitmap = resultBitmap
+        result_tboi_bitmap.bitmap = Image.fromarray(np.array(resultBitmap,dtype=np.uint8), mode="L")
         result_tboi_bitmap.create_graph_out_of_bitmap()
 
         self.startBitmap = start_tboi_bitmap
@@ -138,16 +139,16 @@ class Fitness_Function:
     def calc_fitness_function(self):
         value = 0
         total_weight = Constants.FITNESS_WEIGHT_BALANCE + Constants.FITNESS_WEIGHT_CHANGES + Constants.FITNESS_WEIGHT_ENEMIES + Constants.FITNESS_WEIGHT_SYMMETRY
-        if(not fitness.check_every_traversability()):
+        if(not self.check_every_traversability()):
             self.functionValue = 0
         else:
-            value = (Constants.FITNESS_WEIGHT_BALANCE * fitness.balance_freespace_and_entities()) + (Constants.FITNESS_WEIGHT_CHANGES * fitness.bitmap_changes()) + (Constants.FITNESS_WEIGHT_ENEMIES * fitness.enemy_difference_value()) + + (Constants.FITNESS_WEIGHT_SYMMETRY * fitness.symmetry_score())
+            value = (Constants.FITNESS_WEIGHT_BALANCE * self.balance_freespace_and_entities()) + (Constants.FITNESS_WEIGHT_CHANGES * self.bitmap_changes()) + (Constants.FITNESS_WEIGHT_ENEMIES * self.enemy_difference_value()) + + (Constants.FITNESS_WEIGHT_SYMMETRY * self.symmetry_score())
             standardized_value = value/(total_weight)
             self.functionValue = standardized_value
 
 
 if __name__ == "__main__":
-    path = "Bitmaps/bitmap_4.bmp"
+    path = "Bitmaps/InitRooms/bitmap_32.bmp"
     bitmap = Image.open(path)
     fitness = Fitness_Function(bitmap, bitmap)
     fitness.calc_fitness_function()
