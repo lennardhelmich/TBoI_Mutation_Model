@@ -123,12 +123,12 @@ class Fitness_Function:
         if(difference <= Constants.MAX_NUMBER_FREE_ENEMY_CHANGES):
             return 1
         else:
-            return max(0, 1-(Constants.REDUCTION_PER_ENEMY*(difference-Constants.MAX_NUMBER_FREE_ENEMY_CHANGES)))
+            return max(0, 1-(Constants.VALUE_REDUCTION_PER_ENEMY*(difference-Constants.MAX_NUMBER_FREE_ENEMY_CHANGES)))
 
     def bitmap_changes(self):
         list_prev = list(self.startBitmap.bitmap.getdata())
         list_now = list(self.resultBitmap.bitmap.getdata())
-        total_count = self.resultBitmap.bitmap.width-2 * self.resultBitmap.bitmap.height-2
+        total_count = (self.resultBitmap.bitmap.width-2) * (self.resultBitmap.bitmap.height-2)
         difference_in_pixels = sum(1 for p1, p2 in zip(list_prev, list_now) if p1 != p2)
         difference_percent = (difference_in_pixels/total_count)*100
         if(difference_percent > (Constants.TARGETED_BITMAP_DIFFERENCE*2)):

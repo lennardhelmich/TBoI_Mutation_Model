@@ -48,6 +48,11 @@ class TBoI_Bitmap:
     def save_bitmap_in_folder(self, index, directory):
         file_path = os.path.join(directory, f"bitmap_{index}.bmp")
         self.bitmap.save(file_path)
+    
+    def save_mutation_in_folder_with_fitness(self, index, fitness, directory):
+        os.makedirs(directory, exist_ok=True)
+        file_path = os.path.join(directory, f"mutation_{index}_{fitness}.bmp")
+        self.bitmap.save(file_path)
 
 # Function to assign correct values for pathFindingGraph computed out of current bitmap
     def create_graph_out_of_bitmap(self):

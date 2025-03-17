@@ -7,46 +7,8 @@ from tboi_bitmap import TBoI_Bitmap
 import random
 import copy
 from constants import Constants
-
-
-creator.create("FitnessMax", base.Fitness, weights=(1.0,))
-creator.create("Individual", list, fitness=creator.FitnessMax)
-
-toolbox = base.Toolbox()
-
-bitmap = TBoI_Bitmap()
-
-ALLOWED_VALUES = bitmap.allowed_room_entities()
-
-def random_bit():
-    return random.choice(ALLOWED_VALUES)
-
-def create_individual(data):
-    return data
-
-toolbox.register("individual", creator.Individual)
-toolbox.register("population", list)
-
-def fitness_function(individual):
-    fitness = Fitness_Function(individual[0], individual[1])
-    fitness.calc_fitness_function()
-    return fitness.functionValue
-
-def custom_mutation(individual):
-    current_bitmap = individual[1]
-
-    for i in range(1,len(current_bitmap)-1):
-        for j in range(1,len(current_bitmap[i])-1):
-            if random.random() < Constants.MUTATION_CHANCE_FOR_EACH_SPACE:
-                current_bitmap[i][j] = random.choice(ALLOWED_VALUES)
-    
-    return individual
-
-toolbox.register("mutate", custom_mutation)
-
-toolbox.register("select", tools.selTournament, tournsize=3)
-
-toolbox.register("evaluate", fitness_function)
+from tboi_room_mutation_ea import TBoI_Room_Mutation 
+import numpy as np
 
 # PathFinding Test with pre-defined Rooms
 # To-Do : Split traversable and non-traversable rooms in 2 folders to simplify verification
@@ -69,61 +31,51 @@ def path_finding_test():
     else:
         print("Pathfinding Test : Failure")
 
+def load_bitmap(image_path):
+    image = Image.open(image_path)
+    width,height = image.size
+    pixel_data = []
+    for i in range(height):
+        row = []
+        for j in range(width):
+            pixel = image.getpixel((j,i))
+            row.append(pixel)
+        pixel_data.append(row)
+    return pixel_data
+
+def calculate_mutations_for_room(room_path):
+    bitmap = load_bitmap(room_path)
+    room_mutation_ea = TBoI_Room_Mutation(bitmap)
+    room_mutations = room_mutation_ea.calculate_mutations(
+        Constants.NUMBER_GENERATIONS,
+        Constants.CROSSOVER_PROBABILITY,
+        Constants.MUTATION_PROBABILITY,
+        Constants.POPULATION_SIZE,
+        Constants.NUMBER_ELITES)
+    return room_mutations
+
+def save_room_mutations_for_room(room_path, room_mutations):
+    folder = room_path.split(".")[0] + "/"
+    index = 0
+    for filename in os.listdir(folder):
+        file_path = os.path.join(folder, filename)
+        if os.path.isfile(file_path):
+            os.remove(file_path) 
+    for bitmap in room_mutations:
+        tboi_bitmap = TBoI_Bitmap() 
+        tboi_bitmap.bitmap = Image.fromarray(np.array(bitmap, dtype=np.uint8))
+        fitness_str = str(bitmap.fitness.values[0]).replace('.', ',')
+        tboi_bitmap.save_mutation_in_folder_with_fitness(index, fitness_str, folder)
+        index+=1
+
+
 if __name__ == "__main__":
-
-    init_room_path = "Bitmaps/InitRooms/"
-
-    #Turn InitRooms.xml into InitRooms/*.bmp
-    xml_file_path = 'Rooms/InitRooms.xml'
-    convert_xml_to_bitmap(xml_file_path, init_room_path)
-
-    #Get Bitmaps of InitRooms
-    bitmap = TBoI_Bitmap()
-    initial_individuals = []
-    for rooms in os.listdir(init_room_path):
-        bitmap = Image.open(init_room_path+rooms)
-        width,height = bitmap.size
-        pixel_data = []
-        for i in range(height):
-            row = []
-            for j in range(width):
-                pixel = bitmap.getpixel((j,i))
-                row.append(pixel)
-            pixel_data.append(row)
-        initial_individual = []
-        initial_individual.append(copy.deepcopy(pixel_data))
-        initial_individual.append(copy.deepcopy(pixel_data))
-        initial_individuals.append(initial_individual)
+    first_room_path = "Bitmaps/InitRooms/bitmap_0.bmp"
+    mutations = calculate_mutations_for_room(first_room_path)
+    save_room_mutations_for_room(first_room_path, mutations)
     
-    population = toolbox.population()
 
-    #Extend Population with InitRooms
-    population.extend(toolbox.individual(data)
-                      for data
-                      in initial_individuals)
+
     
-    index = 0
-    for pop in population:
-        # print("Start Room : \n")
-        # for line in pop[0]:
-        #     print(line)
-        # print("End Room : \n")
-        # for line in pop[1]:
-        #     print(line)
-        print(fitness_function(pop))
-    pop0 = population[0]
-    for line in pop0[0]:
-        print(line)
-    print("End Room : \n")
-    for line in pop0[1]:
-        print(line)
-    custom_mutation(pop0)
-    print("Start Room : \n")
-    for line in pop0[0]:
-        print(line)
-    print("End Room : \n")
-    for line in pop0[1]:
-        print(line)
-    index = 0
         
     
