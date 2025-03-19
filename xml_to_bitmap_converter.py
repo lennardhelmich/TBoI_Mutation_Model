@@ -5,6 +5,8 @@ from tboi_bitmap import EntityType
 from tboi_bitmap import TBoI_Bitmap
 from PIL import Image
 from enum import Enum
+from tboi_xml_model import XMLRoomParser
+import copy
 
 # Function to parse the correct simplified EntityType out of TBoI entity_types
 def handle_entity_values(value):
@@ -80,6 +82,55 @@ def convert_xml_to_bitmap(file_path, save_directory):
         print("The specified file was not found.")
     except Exception as e:
         print(f"An error occurred: {e}")
+
+def convert_generated_bitmaps_to_xml(inputXml_path):
+    try:
+        parser = XMLRoomParser(inputXml_path)
+        tboi_bitmap = TBoI_Bitmap()
+        index = 0
+
+        for room in parser.rooms:
+            bitmapPath = "Bitmaps/InputRooms/bitmap_" + str(index) + ".bmp"
+            startBitmap = Image.open(bitmapPath)
+            mutationParser = XMLRoomParser()
+            mutationParser.rooms.append(copy.deepcopy(room))
+            mutationFolder = "Bitmaps/Mutations/bitmap_" + str(index) + "/"
+            width,height = startBitmap.size
+
+            for file in os.listdir(mutationFolder):
+                mutationBitmap = Image.open(file)
+                newRoom = copy.deepcopy(room)
+                changesList = []
+                for x in range(width):
+                    for y in range(height):
+                        newPixelValue = mutationBitmap.getpixel(x,y)
+                        if(newPixelValue != startBitmap.getpixel(x,y)):
+                            changesList.append(((x,y),tboi_bitmap.get_entity_id_with_pixel_value(newPixelValue)))
+                
+                for change in changesList:
+                    entity = room.get_spawns_by_coordinates(change[0][0],change[0][1])
+                    newValue = change[1]
+                    newSpawn = room.get_spawn_of_first_occurence_of_entity(newValue)
+                    newSpawn.x = change[0][0]
+                    newSpawn.y = change[0][1]
+                    if entity.count == 0:
+                        newRoom.add_spawn(newSpawn)
+                    else:
+                        newRoom.delete_spawn(entity[0])
+                        newRoom.add_spawn(newSpawn)
+                
+                mutationParser.rooms.append(newRoom)
+            
+            outputPath = "OutputXmls/Raum" + str(index) + ".xml"
+            mutationParser.save_as_xaml(outputPath)
+
+    except ET.ParseError as e:
+        print(f"Error parsing XML: {e}")
+    except FileNotFoundError:
+        print("The specified file was not found.")
+    except Exception as e:
+        print(f"An error occurred: {e}")
+    
 
 # Example usage
 if __name__ == "__main__":
