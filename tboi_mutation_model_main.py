@@ -1,4 +1,4 @@
-from xml_to_bitmap_converter import convert_xml_to_bitmap
+from xml_to_bitmap_converter import convert_xml_to_bitmap, convert_generated_bitmaps_to_xml
 from PIL import Image
 import os
 from fitness_function import Fitness_Function
@@ -7,7 +7,7 @@ from tboi_bitmap import TBoI_Bitmap
 import random
 import copy
 from constants import Constants
-from tboi_room_mutation_ea import TBoI_Room_Mutation 
+from tboi_room_mutation_ea import TBoI_Room_Mutation
 import numpy as np
 
 # PathFinding Test with pre-defined Rooms
@@ -54,13 +54,23 @@ def calculate_mutations_for_room(room_path):
         Constants.NUMBER_ELITES)
     return room_mutations
 
+def delete_mutations(folder):
+    try:
+        dirList = os.listdir(folder)
+        if(len(dirList) != 0):
+            for filename in dirList:
+                file_path = os.path.join(folder, filename)
+                if os.path.isfile(file_path):
+                    os.remove(file_path) 
+    except FileNotFoundError:
+        print("Mutations did not exist")
+
 def save_room_mutations_for_room(room_path, room_mutations):
     folder = room_path.split(".")[0] + "/"
     index = 0
-    for filename in os.listdir(folder):
-        file_path = os.path.join(folder, filename)
-        if os.path.isfile(file_path):
-            os.remove(file_path) 
+
+    delete_mutations(folder)
+
     for bitmap in room_mutations:
         tboi_bitmap = TBoI_Bitmap() 
         tboi_bitmap.bitmap = Image.fromarray(np.array(bitmap, dtype=np.uint8))
@@ -70,9 +80,16 @@ def save_room_mutations_for_room(room_path, room_mutations):
 
 
 if __name__ == "__main__":
-    first_room_path = "Bitmaps/InitRooms/bitmap_0.bmp"
-    mutations = calculate_mutations_for_room(first_room_path)
-    save_room_mutations_for_room(first_room_path, mutations)
+    initXml = "Rooms/FirstInputRoom.xml"
+    saveFolder = "Bitmaps/InputRooms"
+    convert_xml_to_bitmap(initXml, saveFolder)
+    for filename in os.listdir(saveFolder):
+        path = saveFolder + "/" + filename
+        mutations = calculate_mutations_for_room(path)
+        save_room_mutations_for_room("Bitmaps/Mutations/"+filename, mutations)
+    convert_generated_bitmaps_to_xml(initXml)
+
+
     
 
 

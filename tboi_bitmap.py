@@ -19,6 +19,33 @@ class EntityType(Enum):
     POOP = 10
     SPIKE = 11
 
+
+# Function to parse the correct simplified EntityType out of TBoI entity_types
+def handle_entity_values(value):
+    if value == 0:
+        return EntityType.FREE_SPACE
+    elif value == 5:
+        return EntityType.PICKUP
+    elif value == 3000:
+        return EntityType.PIT
+    elif value == 33 or value == 1400:
+        return EntityType.FIRE
+    elif value == 6:
+        return EntityType.MACHINE
+    elif value == 1900:
+        return EntityType.BLOCK
+    elif 10 <= value <= 900:
+        return EntityType.ENTITY
+    elif 1000 <= value <= 1100:
+        return EntityType.STONE
+    elif 1490 <= value <= 1510:
+        return EntityType.POOP
+    elif 1930 <= value <= 2000:
+        return EntityType.SPIKE
+    else:
+        valueStr = str(value)
+        print("The following entity_type is not defined in BitmapValues : " + valueStr)
+
 class TBoI_Bitmap:
 
 # TBoI_Bitmap Constructor with width and height pre-defined and initial bitmap and pathFindingGraph with 0s
@@ -27,6 +54,7 @@ class TBoI_Bitmap:
         self.height = height
         self.bitmap =  Image.new('L', (width, height), 0)
         self.pathFindingGraph = [[0 for _ in range(width)] for _ in range(height)]
+
 
 # Function to evenly assign pixel values with count of different entities
     def get_pixel_value_with_entity_id(self, entity_id):

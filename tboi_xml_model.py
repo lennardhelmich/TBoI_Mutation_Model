@@ -1,6 +1,6 @@
 import xml.etree.ElementTree as ET
-from xml_to_bitmap_converter import handle_entity_values
 from xml_to_bitmap_converter import EntityType
+from tboi_bitmap import handle_entity_values
 import os
 
 class Room:
@@ -24,13 +24,13 @@ class Room:
         self.spawns.append(spawn)
     
     def delete_spawn(self, spawn):
-        self.spawns.remove(spawn)
+        self.spawns = list(filter(lambda item: not(item.x == spawn.x and item.y == spawn.y), self.spawns))
         
     def get_spawns_by_coordinates(self, x, y):
         return [spawn for spawn in self.spawns if spawn.x == x and spawn.y == y]
     
     def get_spawn_of_first_occurence_of_entity(self, entity):
-        for spawn in self.spawns():
+        for spawn in self.spawns:
             entityType = spawn.entities[0].type
             if(handle_entity_values(entityType) == entity):
                 return spawn
@@ -47,7 +47,7 @@ class Room:
             newEntity = Entity(33,0,0,1.0)
             newSpawn.entities.append(newEntity)
         elif(entity == EntityType.MACHINE):
-            newEntity = Entity(6,0,0,1.0)
+            newEntity = Entity(6,1,0,1.0)
             newSpawn.entities.append(newEntity)
         elif(entity == EntityType.BLOCK):
             newEntity = Entity(1900,0,0,1.0)
