@@ -59,7 +59,7 @@ class Room:
             newEntity = Entity(1000,0,0,1.0)
             newSpawn.entities.append(newEntity)
         elif(entity == EntityType.POOP):
-            newEntity = Entity(1490,0,0,1.0)
+            newEntity = Entity(1500,0,0,1.0)
             newSpawn.entities.append(newEntity)
         elif(entity == EntityType.SPIKE):
             newEntity = Entity(1930,0,0,1.0)

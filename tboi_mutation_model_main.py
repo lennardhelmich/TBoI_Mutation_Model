@@ -1,3 +1,4 @@
+import multiprocessing
 from xml_to_bitmap_converter import convert_xml_to_bitmap, convert_generated_bitmaps_to_xml
 from PIL import Image
 import os
@@ -13,7 +14,7 @@ import numpy as np
 # PathFinding Test with pre-defined Rooms
 # To-Do : Split traversable and non-traversable rooms in 2 folders to simplify verification
 def path_finding_test():
-    xml_file_path = 'Rooms/PathfindingTestRooms.xml'
+    xml_file_path = 'OutputXmls/Raum0.xml'
     convert_xml_to_bitmap(xml_file_path, "Bitmaps/PathfindingTests")
     expectedResult = [False, False, False, False, True, True, True, True, True]
     returnedResult = []
@@ -43,9 +44,7 @@ def load_bitmap(image_path):
         pixel_data.append(row)
     return pixel_data
 
-def calculate_mutations_for_room(room_path):
-    bitmap = load_bitmap(room_path)
-    room_mutation_ea = TBoI_Room_Mutation(bitmap)
+def calculate_mutations_for_room(room_mutation_ea):
     room_mutations = room_mutation_ea.calculate_mutations(
         Constants.NUMBER_GENERATIONS,
         Constants.CROSSOVER_PROBABILITY,
@@ -85,7 +84,9 @@ if __name__ == "__main__":
     convert_xml_to_bitmap(initXml, saveFolder)
     for filename in os.listdir(saveFolder):
         path = saveFolder + "/" + filename
-        mutations = calculate_mutations_for_room(path)
+        bitmap = load_bitmap(path)
+        room_mutation_ea = TBoI_Room_Mutation(bitmap)
+        mutations = calculate_mutations_for_room(room_mutation_ea)
         save_room_mutations_for_room("Bitmaps/Mutations/"+filename, mutations)
     convert_generated_bitmaps_to_xml(initXml)
 

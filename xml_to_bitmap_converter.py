@@ -104,6 +104,7 @@ def convert_generated_bitmaps_to_xml(inputXml_path):
             
             outputPath = "OutputXmls/Raum" + str(index) + ".xml"
             mutationParser.save_as_xaml(outputPath)
+            index+=1
     
 
 # Example usage

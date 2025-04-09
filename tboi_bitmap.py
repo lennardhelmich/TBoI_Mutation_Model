@@ -140,13 +140,13 @@ class TBoI_Bitmap:
     def allowed_room_entities(self):
         returnList = []
         for entities in EntityType:
-            if(entities != EntityType.DOOR and entities != EntityType.WALL):
+            if(entities != EntityType.DOOR and entities != EntityType.WALL and entities != EntityType.MACHINE and entities != EntityType.PICKUP):
                 returnList.append(self.get_pixel_value_with_entity_id(entities))
         return returnList
     
 if __name__ == "__main__":
     tboi_bitmap = TBoI_Bitmap()
-    tboi_bitmap.bitmap = Image.open("Bitmaps/bitmap_5.bmp")
+    th = tboi_bitmap.allowed_room_entities()
     tboi_bitmap.create_graph_out_of_bitmap()
     graph = tboi_bitmap.pathFindingGraph
     for x in range(tboi_bitmap.height):
