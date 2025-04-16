@@ -93,27 +93,34 @@ class TBoI_Bitmap:
                     self.pathFindingGraph[y][x] = 1
 
 # Path Finding Algorithm (Breadth-First Search (BFS)) for fitness function
-    def is_path_existent(self, start, end):
-        if not self.is_within_bounds(start) or not self.is_within_bounds(end):
-            print("No path exists because start/end is not within bounds.")
-            return False
-        
-        if self.pathFindingGraph[start[1]][start[0]] == 1 or self.pathFindingGraph[end[1]][end[0]] == 1:
-            print("No path exists because start/end is not traversable")
-            return False
-        
-        queue = deque([start])
+    def is_path_existent(self, start, targets):
+        """
+        Check if there is a path from the start position to all target positions.
+        """
         visited = set()
+        queue = deque([start])  # Use deque for efficient queue operations
+        remaining_targets = set(targets)  # Copy targets to avoid modifying the original set
 
         while queue:
             current = queue.popleft()
-            if(current == end):
-                return True
+            if current in visited:
+                continue
             visited.add(current)
-            for neighbor in self.get_neighbors(current):
+
+            # If the current position is in targets, mark it as reached
+            if current in remaining_targets:
+                remaining_targets.remove(current)
+                # If all targets are reached, return True
+                if not remaining_targets:
+                    return True
+
+            # Add neighbors to the queue
+            neighbors = self.get_neighbors(current)
+            for neighbor in neighbors:
                 if neighbor not in visited and self.pathFindingGraph[neighbor[1]][neighbor[0]] == 0:
                     queue.append(neighbor)
-        
+
+        # If not all targets are reached, return False
         return False
 
 # Get all current neighbors for path finding

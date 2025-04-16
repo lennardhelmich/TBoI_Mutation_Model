@@ -12,10 +12,10 @@ class Constants:
     FITNESS_WEIGHT_SYMMETRY = 4
 
     #Evolutionary Algorithm Inputs
-    NUMBER_GENERATIONS = 500
+    NUMBER_GENERATIONS = 50
     CROSSOVER_PROBABILITY = 0.4
     MUTATION_PROBABILITY = 0.8
-    POPULATION_SIZE = 150
+    POPULATION_SIZE = 100
     NUMBER_ELITES = 50
 
     #Tile probability 
