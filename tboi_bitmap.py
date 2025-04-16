@@ -94,12 +94,9 @@ class TBoI_Bitmap:
 
 # Path Finding Algorithm (Breadth-First Search (BFS)) for fitness function
     def is_path_existent(self, start, targets):
-        """
-        Check if there is a path from the start position to all target positions.
-        """
         visited = set()
-        queue = deque([start])  # Use deque for efficient queue operations
-        remaining_targets = set(targets)  # Copy targets to avoid modifying the original set
+        queue = deque([start])
+        remaining_targets = set(targets)
 
         while queue:
             current = queue.popleft()
@@ -107,21 +104,21 @@ class TBoI_Bitmap:
                 continue
             visited.add(current)
 
-            # If the current position is in targets, mark it as reached
             if current in remaining_targets:
                 remaining_targets.remove(current)
-                # If all targets are reached, return True
                 if not remaining_targets:
                     return True
 
-            # Add neighbors to the queue
-            neighbors = self.get_neighbors(current)
-            for neighbor in neighbors:
+            for neighbor in self.get_neighbors(current):
                 if neighbor not in visited and self.pathFindingGraph[neighbor[1]][neighbor[0]] == 0:
                     queue.append(neighbor)
 
-        # If not all targets are reached, return False
         return False
+
+    def get_neighbors(self, position):
+        x, y = position
+        directions = [(0, -1), (0, 1), (-1, 0), (1, 0)]
+        return [(x + dx, y + dy) for dx, dy in directions if self.is_within_bounds((x + dx, y + dy))]
 
 # Get all current neighbors for path finding
     def get_neighbors(self, position):

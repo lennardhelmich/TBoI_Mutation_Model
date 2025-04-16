@@ -59,35 +59,28 @@ class TBoI_Room_Mutation:
         def mutate_pixel(individual):
             height = len(individual)
             width = len(individual[0])
-            i = random.randint(1, height - 2)
-            j = random.randint(1, width - 2)
-            while (i==1 and j==7) or (i==4 and j==1) or(i==4 and j==13) or(i==7 and j==7):
-                i = random.randint(1, height - 2)
-                j = random.randint(1, width - 2)
+            i, j = random.randint(1, height - 2), random.randint(1, width - 2)
+
+            while (i, j) in [(1, 7), (4, 1), (4, 13), (7, 7)]:
+                i, j = random.randint(1, height - 2), random.randint(1, width - 2)
 
             selected_mutation = random.choices(self.AVAILABLE_MUTATIONS, weights=self.MUT_PROB, k=1)[0]
             new_ind = random.choices(self.ALLOWED_VALUES, weights=self.TILE_PROB, k=1)[0]
-            match selected_mutation:
-                case 1:
-                    individual[i][j] = new_ind
-                case 2: 
-                    i_horizontal, j_horizontal = symmetric_horizontal(height, i, j)
-                    individual[i][j] = new_ind
-                    individual[i_horizontal][j_horizontal] = new_ind
-                case 3:
-                    i_vertical, j_vertical = symmetric_vertical(width, i, j)
-                    individual[i][j] = new_ind
-                    individual[i_vertical][j_vertical] = new_ind
-                case 4: 
-                    i_center, j_center = symmetric_center(width, height, i, j)
-                    individual[i][j] = new_ind
-                    individual[i_center][j_center] = new_ind
-                case 5:
-                    new_i, new_j = rectangle_i_j(i,j)
-                    individual[i][j] = new_ind
-                    individual[i][new_j] = new_ind
-                    individual[new_i][j] = new_ind
-                    individual[new_i][new_j] = new_ind
+
+            if selected_mutation == 1:
+                individual[i][j] = new_ind
+            elif selected_mutation == 2:
+                i_h, j_h = symmetric_horizontal(height, i, j)
+                individual[i][j] = individual[i_h][j_h] = new_ind
+            elif selected_mutation == 3:
+                i_v, j_v = symmetric_vertical(width, i, j)
+                individual[i][j] = individual[i_v][j_v] = new_ind
+            elif selected_mutation == 4:
+                i_c, j_c = symmetric_center(width, height, i, j)
+                individual[i][j] = individual[i_c][j_c] = new_ind
+            elif selected_mutation == 5:
+                new_i, new_j = rectangle_i_j(i, j)
+                individual[i][j] = individual[i][new_j] = individual[new_i][j] = individual[new_i][new_j] = new_ind
 
         return mutate_pixel
     
@@ -169,10 +162,9 @@ class TBoI_Room_Mutation:
 
         return population  # Optionally return final population or best individual
 
-   
 
 
-    
 
 
-    
+
+

@@ -21,22 +21,22 @@ class Fitness_Function:
         self.functionValue = 0
 
     def check_every_traversability(self):
-        doors = set()
-        enemies = set()
+        doors = []
+        enemies = []
         for x in range(self.resultBitmap.width):
             for y in range(self.resultBitmap.height):
                 pixelValue = self.resultBitmap.bitmap.getpixel((x, y))
                 entity_id = self.resultBitmap.get_entity_id_with_pixel_value(pixelValue)
                 if entity_id == EntityType.DOOR:
-                    doors.add((x, y))
-                if entity_id == EntityType.ENTITY:
-                    enemies.add((x, y))
+                    doors.append((x, y))
+                elif entity_id == EntityType.ENTITY:
+                    enemies.append((x, y))
 
         if not doors:
             return False
 
-        firstDoor = doors.pop()
-        targets = doors.union(enemies)
+        firstDoor = doors[0]
+        targets = set(doors + enemies)
 
         # Use the optimized is_path_existent method
         return self.resultBitmap.is_path_existent(firstDoor, targets)
