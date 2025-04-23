@@ -4,6 +4,7 @@ import copy
 from fitness_function import Fitness_Function
 from tboi_bitmap import TBoI_Bitmap
 from constants import Constants
+import multiprocessing
 
 def symmetric_horizontal(height, i, j):
     return height - 1 - i, j
@@ -21,9 +22,7 @@ def rectangle_i_j(i,j):
         
 
 class TBoI_Room_Mutation:
-
-    def make_select_function(self):
-        def select_best_unique(individuals, k):
+    def select_best_unique(self, individuals, k):
             seen_fitness = set()
             selected = []
 
@@ -43,54 +42,57 @@ class TBoI_Room_Mutation:
             
             return selected
 
-        return select_best_unique
+    def make_select_function(self):
+        return self.select_best_unique
+
+    def fitness_function(self, individual):
+        fitness = Fitness_Function(startBitmap=self.startBitmap, resultBitmap=individual)
+        fitness.calc_fitness_function()
+        return fitness.functionValue,
 
     def make_fitness_function(self):
-        def fitness_function(individual):
-            fitness = Fitness_Function(startBitmap=self.startBitmap, resultBitmap=individual)
-            fitness.calc_fitness_function()
-            return fitness.functionValue,
-        
-        return fitness_function
-        
+        return self.fitness_function
     
-    
-    def make_mutate_function(self):
-        def mutate_pixel(individual):
-            height = len(individual)
-            width = len(individual[0])
+    def mutate_pixel(self, individual):
+        height = len(individual)
+        width = len(individual[0])
+        i, j = random.randint(1, height - 2), random.randint(1, width - 2)
+
+        while (i, j) in [(1, 7), (4, 1), (4, 13), (7, 7)]:
             i, j = random.randint(1, height - 2), random.randint(1, width - 2)
 
-            while (i, j) in [(1, 7), (4, 1), (4, 13), (7, 7)]:
-                i, j = random.randint(1, height - 2), random.randint(1, width - 2)
+        selected_mutation = random.choices(self.AVAILABLE_MUTATIONS, weights=self.MUT_PROB, k=1)[0]
+        new_ind = random.choices(self.ALLOWED_VALUES, weights=self.TILE_PROB, k=1)[0]
 
-            selected_mutation = random.choices(self.AVAILABLE_MUTATIONS, weights=self.MUT_PROB, k=1)[0]
-            new_ind = random.choices(self.ALLOWED_VALUES, weights=self.TILE_PROB, k=1)[0]
+        if selected_mutation == 1:
+            individual[i][j] = new_ind
+        elif selected_mutation == 2:
+            i_h, j_h = symmetric_horizontal(height, i, j)
+            individual[i][j] = individual[i_h][j_h] = new_ind
+        elif selected_mutation == 3:
+            i_v, j_v = symmetric_vertical(width, i, j)
+            individual[i][j] = individual[i_v][j_v] = new_ind
+        elif selected_mutation == 4:
+            i_c, j_c = symmetric_center(width, height, i, j)
+            individual[i][j] = individual[i_c][j_c] = new_ind
+        elif selected_mutation == 5:
+            new_i, new_j = rectangle_i_j(i, j)
+            individual[i][j] = individual[i][new_j] = individual[new_i][j] = individual[new_i][new_j] = new_ind
 
-            if selected_mutation == 1:
-                individual[i][j] = new_ind
-            elif selected_mutation == 2:
-                i_h, j_h = symmetric_horizontal(height, i, j)
-                individual[i][j] = individual[i_h][j_h] = new_ind
-            elif selected_mutation == 3:
-                i_v, j_v = symmetric_vertical(width, i, j)
-                individual[i][j] = individual[i_v][j_v] = new_ind
-            elif selected_mutation == 4:
-                i_c, j_c = symmetric_center(width, height, i, j)
-                individual[i][j] = individual[i_c][j_c] = new_ind
-            elif selected_mutation == 5:
-                new_i, new_j = rectangle_i_j(i, j)
-                individual[i][j] = individual[i][new_j] = individual[new_i][j] = individual[new_i][new_j] = new_ind
-
-        return mutate_pixel
+    def make_mutate_function(self):
+        return self.mutate_pixel
     
+    def mate_bitmaps(self, ind1, ind2):
+        crossover_point = random.randint(1, min(len(ind1), len(ind2)) - 1) 
+        ind1[:crossover_point], ind2[:crossover_point] = ind2[:crossover_point], ind1[:crossover_point]
+
     def make_mate_function(self):
-        def mate_bitmaps(ind1, ind2):
-            crossover_point = random.randint(1, min(len(ind1), len(ind2)) - 1) 
-            ind1[:crossover_point], ind2[:crossover_point] = ind2[:crossover_point], ind1[:crossover_point]
-        
-        return mate_bitmaps
+        return self.mate_bitmaps
     
+    def init_individual(self):
+        # Create a deep copy of the startBitmap for each individual
+        return [copy.deepcopy(row) for row in self.startBitmap]
+
     def __init__(self, startBitmap):
         self.startBitmap = startBitmap
 
@@ -99,7 +101,8 @@ class TBoI_Room_Mutation:
 
         self.toolbox = base.Toolbox()
 
-        self.toolbox.register("individual", tools.initIterate, creator.Individual, lambda: [copy.deepcopy(row) for row in self.startBitmap])
+        # Replace lambda with a named function
+        self.toolbox.register("individual", tools.initIterate, creator.Individual, self.init_individual)
         self.toolbox.register("population", tools.initRepeat, list, self.toolbox.individual)
         self.toolbox.register("evaluate", self.make_fitness_function())
         self.toolbox.register("mutate", self.make_mutate_function())
@@ -109,56 +112,60 @@ class TBoI_Room_Mutation:
         bitmap = TBoI_Bitmap()
         self.ALLOWED_VALUES = bitmap.allowed_room_entities()
 
-        #calculate probabilities out of constants
-        sum = Constants.PROB_BLOCK + Constants.PROB_ENTITY + Constants.PROB_FIRE + Constants.PROB_FREE_SPACE + Constants.PROB_PIT + Constants.PROB_POOP + Constants.PROB_SPIKE
-        self.TILE_PROB = []
-        self.TILE_PROB.append((Constants.PROB_FREE_SPACE/sum))
-        self.TILE_PROB.append((Constants.PROB_STONE/sum))
-        self.TILE_PROB.append((Constants.PROB_PIT/sum))
-        self.TILE_PROB.append((Constants.PROB_BLOCK/sum))
-        self.TILE_PROB.append((Constants.PROB_ENTITY/sum))
-        self.TILE_PROB.append((Constants.PROB_FIRE/sum))
-        self.TILE_PROB.append((Constants.PROB_POOP/sum))
-        self.TILE_PROB.append((Constants.PROB_SPIKE/sum))
+        # Calculate probabilities out of constants
+        sum = (Constants.PROB_BLOCK + Constants.PROB_ENTITY + Constants.PROB_FIRE +
+               Constants.PROB_FREE_SPACE + Constants.PROB_PIT + Constants.PROB_POOP + Constants.PROB_SPIKE)
+        self.TILE_PROB = [
+            Constants.PROB_FREE_SPACE / sum,
+            Constants.PROB_STONE / sum,
+            Constants.PROB_PIT / sum,
+            Constants.PROB_BLOCK / sum,
+            Constants.PROB_ENTITY / sum,
+            Constants.PROB_FIRE / sum,
+            Constants.PROB_POOP / sum,
+            Constants.PROB_SPIKE / sum,
+        ]
 
-        self.AVAILABLE_MUTATIONS = [1,2,3,4,5]
-        self.MUT_PROB = [0.2,0.2,0.2,0.2,0.2]
+        self.AVAILABLE_MUTATIONS = [1, 2, 3, 4, 5]
+        self.MUT_PROB = [0.2, 0.2, 0.2, 0.2, 0.2]
     
     def calculate_mutations(self, NGEN, CXPB, MUTPB, popSize, numElites):
-        population = self.toolbox.population(n=popSize)
-        fits = list(map(self.toolbox.evaluate, population))
+        # Create a multiprocessing pool
+        with multiprocessing.Pool() as pool:
+            population = self.toolbox.population(n=popSize)
+            fits = list(pool.map(self.toolbox.evaluate, population))  # Use pool.map directly
 
-        for ind, fit in zip(population, fits):
-            ind.fitness.values = fit
-
-        for gen in range(NGEN):
-            elites = self.toolbox.select(population, numElites)
-            
-            offspring = [copy.deepcopy(ind) for ind in elites]  # Start offspring with elites
-            
-            while len(offspring) < len(population):  # Fill up offspring till full population size
-                parent1, parent2 = random.sample(elites, 2)  # Randomly select two parents from elites
-                child1, child2 = copy.deepcopy(parent1), copy.deepcopy(parent2)
-                
-                if random.random() < CXPB:
-                    self.toolbox.mate(child1, child2)
-                    del child1.fitness.values  
-                    del child2.fitness.values  
-
-                offspring.append(child1)
-                offspring.append(child2)
-
-            for mutant in offspring:
-                if random.random() < MUTPB:
-                    self.toolbox.mutate(mutant)
-                    del mutant.fitness.values
-            
-            invalid_ind = [ind for ind in offspring if not ind.fitness.valid]
-            fits = list(self.toolbox.map(self.toolbox.evaluate, invalid_ind))
-            for ind, fit in zip(invalid_ind, fits):
+            for ind, fit in zip(population, fits):
                 ind.fitness.values = fit
 
-            population[:] = offspring
+            for gen in range(NGEN):
+                elites = self.toolbox.select(population, numElites)
+                
+                offspring = [copy.deepcopy(ind) for ind in elites]  # Start offspring with elites
+                
+                while len(offspring) < len(population):  # Fill up offspring till full population size
+                    parent1, parent2 = random.sample(elites, 2)  # Randomly select two parents from elites
+                    child1, child2 = copy.deepcopy(parent1), copy.deepcopy(parent2)
+                    
+                    if random.random() < CXPB:
+                        self.toolbox.mate(child1, child2)
+                        del child1.fitness.values  
+                        del child2.fitness.values  
+
+                    offspring.append(child1)
+                    offspring.append(child2)
+
+                for mutant in offspring:
+                    if random.random() < MUTPB:
+                        self.toolbox.mutate(mutant)
+                        del mutant.fitness.values
+                
+                invalid_ind = [ind for ind in offspring if not ind.fitness.valid]
+                fits = list(pool.map(self.toolbox.evaluate, invalid_ind))  # Use pool.map directly
+                for ind, fit in zip(invalid_ind, fits):
+                    ind.fitness.values = fit
+
+                population[:] = offspring
 
         return population  # Optionally return final population or best individual
 
