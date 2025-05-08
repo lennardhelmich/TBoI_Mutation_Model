@@ -41,6 +41,28 @@ class Fitness_Function:
         # Use the optimized is_path_existent method
         return self.resultBitmap.is_path_existent(firstDoor, targets)
     
+    def pixel_variation_score(self):
+        bitmap = self.resultBitmap
+        width, height = bitmap.bitmap.size
+        total_matches = 0
+        total_comparisons = 0
+
+        # Iterate over all pixels (excluding border pixels)
+        for y in range(1, height - 1):
+            for x in range(1, width - 1):
+                current_pixel = bitmap.bitmap.getpixel((x, y))
+
+                neighbors = bitmap.get_all_neighbors((x, y))
+
+                for neighbor in neighbors:
+                    if current_pixel == bitmap.bitmap.getpixel(neighbor):
+                        total_matches += 1
+                    total_comparisons += 1
+
+        normalized_score = total_matches / total_comparisons
+
+        return normalized_score
+    
     def vertical_symmetric_score(self, width, height, bitmap):
         total_compared_pixels = 0
         vertical_matches = 0
@@ -136,11 +158,11 @@ class Fitness_Function:
 
     def calc_fitness_function(self):
         value = 0
-        total_weight = Constants.FITNESS_WEIGHT_BALANCE + Constants.FITNESS_WEIGHT_CHANGES + Constants.FITNESS_WEIGHT_ENEMIES + Constants.FITNESS_WEIGHT_SYMMETRY
+        total_weight = Constants.FITNESS_WEIGHT_BALANCE + Constants.FITNESS_WEIGHT_CHANGES + Constants.FITNESS_WEIGHT_ENEMIES + Constants.FITNESS_WEIGHT_SYMMETRY + Constants.FITNESS_WEIGHT_VARIATION
         if(not self.check_every_traversability()):
             self.functionValue = 0
         else:
-            value = (Constants.FITNESS_WEIGHT_BALANCE * self.balance_freespace_and_entities()) + (Constants.FITNESS_WEIGHT_CHANGES * self.bitmap_changes()) + (Constants.FITNESS_WEIGHT_ENEMIES * self.enemy_difference_value()) + + (Constants.FITNESS_WEIGHT_SYMMETRY * self.symmetry_score())
+            value = (Constants.FITNESS_WEIGHT_BALANCE * self.balance_freespace_and_entities()) + (Constants.FITNESS_WEIGHT_CHANGES * self.bitmap_changes()) + (Constants.FITNESS_WEIGHT_ENEMIES * self.enemy_difference_value()) +  (Constants.FITNESS_WEIGHT_SYMMETRY * self.symmetry_score()) + (Constants.FITNESS_WEIGHT_VARIATION * self.pixel_variation_score())
             standardized_value = value/(total_weight)
             self.functionValue = standardized_value
 

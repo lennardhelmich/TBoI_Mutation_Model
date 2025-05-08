@@ -10,6 +10,7 @@ class Constants:
     FITNESS_WEIGHT_BALANCE = 2
     FITNESS_WEIGHT_CHANGES = 6
     FITNESS_WEIGHT_SYMMETRY = 4
+    FITNESS_WEIGHT_VARIATION = 2
 
     #Evolutionary Algorithm Inputs
     NUMBER_GENERATIONS = 25

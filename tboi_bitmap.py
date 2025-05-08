@@ -115,6 +115,11 @@ class TBoI_Bitmap:
 
         return False
 
+    def get_all_neighbors(self, position):
+        x, y = position
+        directions = [(0, -1), (0, 1),(-1, 0), (1, 0),(-1, -1), (-1, 1),(1, -1), (1, 1)]
+        return [(x + dx, y + dy) for dx, dy in directions if self.is_within_bounds((x + dx, y + dy))]
+
     def get_neighbors(self, position):
         x, y = position
         directions = [(0, -1), (0, 1), (-1, 0), (1, 0)]

@@ -9,10 +9,16 @@ import random
 import copy
 from constants import Constants
 from tboi_room_mutation_ea import TBoI_Room_Mutation
+import time
 import numpy as np
+import logging
+import matplotlib
+matplotlib.use("Agg")
+import matplotlib.pyplot as plt
 
-# PathFinding Test with pre-defined Rooms
-# To-Do : Split traversable and non-traversable rooms in 2 folders to simplify verification
+
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+
 def path_finding_test():
     xml_file_path = 'OutputXmls/Raum0.xml'
     convert_xml_to_bitmap(xml_file_path, "Bitmaps/PathfindingTests")
@@ -45,13 +51,13 @@ def load_bitmap(image_path):
     return pixel_data
 
 def calculate_mutations_for_room(room_mutation_ea):
-    room_mutations = room_mutation_ea.calculate_mutations(
+    room_mutations, fitness_history = room_mutation_ea.calculate_mutations(
         Constants.NUMBER_GENERATIONS,
         Constants.CROSSOVER_PROBABILITY,
         Constants.MUTATION_PROBABILITY,
         Constants.POPULATION_SIZE,
         Constants.NUMBER_ELITES)
-    return room_mutations
+    return room_mutations, fitness_history
 
 def delete_mutations(folder):
     try:
@@ -77,23 +83,34 @@ def save_room_mutations_for_room(room_path, room_mutations):
         tboi_bitmap.save_mutation_in_folder_with_fitness(index, fitness_str, folder)
         index+=1
 
+def plot_progress(fitness_history, filename="fitness_progress.png"):
+    plt.plot(fitness_history)
+    plt.xlabel("Generation")
+    plt.ylabel("Best Fitness")
+    plt.title("Fitness Progress")
+    plt.savefig(filename)
+    plt.close()
+
 
 if __name__ == "__main__":
     initXml = "Rooms/FirstInputRoom.xml"
     saveFolder = "Bitmaps/InputRooms"
     convert_xml_to_bitmap(initXml, saveFolder)
+
     for filename in os.listdir(saveFolder):
         path = saveFolder + "/" + filename
         bitmap = load_bitmap(path)
         room_mutation_ea = TBoI_Room_Mutation(bitmap)
-        mutations = calculate_mutations_for_room(room_mutation_ea)
-        save_room_mutations_for_room("Bitmaps/Mutations/"+filename, mutations)
+        mutations, fitness_history = calculate_mutations_for_room(room_mutation_ea)
+        save_room_mutations_for_room("Bitmaps/Mutations/" + filename, mutations)
+        plot_progress(fitness_history, filename=f"fitness_progress_{filename}.png")
+
     convert_generated_bitmaps_to_xml(initXml)
 
 
-    
 
 
-    
-        
-    
+
+
+
+

@@ -5,6 +5,7 @@ from fitness_function import Fitness_Function
 from tboi_bitmap import TBoI_Bitmap
 from constants import Constants
 import multiprocessing
+import matplotlib.pyplot as plt
 
 def symmetric_horizontal(height, i, j):
     return height - 1 - i, j
@@ -26,7 +27,6 @@ class TBoI_Room_Mutation:
             seen_fitness = set()
             selected = []
 
-            # Sort individuals by fitness descending (best first)
             sorted_inds = sorted(individuals, key=lambda ind: ind.fitness.values[0], reverse=True)
 
             for ind in sorted_inds:
@@ -90,7 +90,6 @@ class TBoI_Room_Mutation:
         return self.mate_bitmaps
     
     def init_individual(self):
-        # Create a deep copy of the startBitmap for each individual
         return [copy.deepcopy(row) for row in self.startBitmap]
 
     def __init__(self, startBitmap):
@@ -101,7 +100,6 @@ class TBoI_Room_Mutation:
 
         self.toolbox = base.Toolbox()
 
-        # Replace lambda with a named function
         self.toolbox.register("individual", tools.initIterate, creator.Individual, self.init_individual)
         self.toolbox.register("population", tools.initRepeat, list, self.toolbox.individual)
         self.toolbox.register("evaluate", self.make_fitness_function())
@@ -112,7 +110,6 @@ class TBoI_Room_Mutation:
         bitmap = TBoI_Bitmap()
         self.ALLOWED_VALUES = bitmap.allowed_room_entities()
 
-        # Calculate probabilities out of constants
         sum = (Constants.PROB_BLOCK + Constants.PROB_ENTITY + Constants.PROB_FIRE +
                Constants.PROB_FREE_SPACE + Constants.PROB_PIT + Constants.PROB_POOP + Constants.PROB_SPIKE)
         self.TILE_PROB = [
@@ -130,27 +127,28 @@ class TBoI_Room_Mutation:
         self.MUT_PROB = [0.2, 0.2, 0.2, 0.2, 0.2]
     
     def calculate_mutations(self, NGEN, CXPB, MUTPB, popSize, numElites):
-        # Create a multiprocessing pool
-        with multiprocessing.Pool() as pool:
+        fitness_history = []
+
+        pool = multiprocessing.Pool()  # Create the pool
+        try:
             population = self.toolbox.population(n=popSize)
-            fits = list(pool.map(self.toolbox.evaluate, population))  # Use pool.map directly
+            fits = list(pool.map(self.toolbox.evaluate, population))
 
             for ind, fit in zip(population, fits):
                 ind.fitness.values = fit
 
             for gen in range(NGEN):
                 elites = self.toolbox.select(population, numElites)
-                
-                offspring = [copy.deepcopy(ind) for ind in elites]  # Start offspring with elites
-                
-                while len(offspring) < len(population):  # Fill up offspring till full population size
-                    parent1, parent2 = random.sample(elites, 2)  # Randomly select two parents from elites
+                offspring = [copy.deepcopy(ind) for ind in elites]
+
+                while len(offspring) < len(population):
+                    parent1, parent2 = random.sample(elites, 2)
                     child1, child2 = copy.deepcopy(parent1), copy.deepcopy(parent2)
-                    
+
                     if random.random() < CXPB:
                         self.toolbox.mate(child1, child2)
-                        del child1.fitness.values  
-                        del child2.fitness.values  
+                        del child1.fitness.values
+                        del child2.fitness.values
 
                     offspring.append(child1)
                     offspring.append(child2)
@@ -159,15 +157,20 @@ class TBoI_Room_Mutation:
                     if random.random() < MUTPB:
                         self.toolbox.mutate(mutant)
                         del mutant.fitness.values
-                
+
                 invalid_ind = [ind for ind in offspring if not ind.fitness.valid]
-                fits = list(pool.map(self.toolbox.evaluate, invalid_ind))  # Use pool.map directly
+                fits = list(pool.map(self.toolbox.evaluate, invalid_ind))
                 for ind, fit in zip(invalid_ind, fits):
                     ind.fitness.values = fit
 
                 population[:] = offspring
-
-        return population  # Optionally return final population or best individual
+                best_fitness = max(ind.fitness.values[0] for ind in population)
+                fitness_history.append(best_fitness)
+        finally:
+            pool.close()
+            pool.join()
+        pool.terminate()
+        return population, fitness_history
 
 
 
