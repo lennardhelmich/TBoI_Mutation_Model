@@ -93,7 +93,7 @@ def plot_progress(fitness_history, filename="fitness_progress.png"):
 
 
 if __name__ == "__main__":
-    initXml = "Rooms/FirstInputRoom.xml"
+    initXml = "Rooms/SecondInputRooms.xml"
     saveFolder = "Bitmaps/InputRooms"
     convert_xml_to_bitmap(initXml, saveFolder)
 
@@ -104,7 +104,7 @@ if __name__ == "__main__":
         mutations, fitness_history = calculate_mutations_for_room(room_mutation_ea)
         save_room_mutations_for_room("Bitmaps/Mutations/" + filename, mutations)
         plot_progress(fitness_history, filename=f"fitness_progress_{filename}.png")
-
+    
     convert_generated_bitmaps_to_xml(initXml)
 
 
