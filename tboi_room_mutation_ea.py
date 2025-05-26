@@ -153,7 +153,7 @@ class TBoI_Room_Mutation:
                     offspring.append(child1)
                     offspring.append(child2)
 
-                for mutant in offspring:
+                for mutant in offspring[numElites:]:
                     if random.random() < MUTPB:
                         self.toolbox.mutate(mutant)
                         del mutant.fitness.values
@@ -170,7 +170,8 @@ class TBoI_Room_Mutation:
             pool.close()
             pool.join()
         pool.terminate()
-        return population, fitness_history
+        best_pop = self.toolbox.select(population, numElites)
+        return best_pop, fitness_history
 
 
 

@@ -70,11 +70,9 @@ def delete_mutations(folder):
     except FileNotFoundError:
         print("Mutations did not exist")
 
-def save_room_mutations_for_room(room_path, room_mutations):
+def save_room_mutations_for_room(room_path, room_mutations, offset):
     folder = room_path.split(".")[0] + "/"
-    index = 0
-
-    delete_mutations(folder)
+    index = 0 + offset*Constants.NUMBER_ELITES
 
     for bitmap in room_mutations:
         tboi_bitmap = TBoI_Bitmap() 
@@ -93,17 +91,22 @@ def plot_progress(fitness_history, filename="fitness_progress.png"):
 
 
 if __name__ == "__main__":
-    initXml = "Rooms/SecondInputRooms.xml"
+    initXml = "Rooms/FirstInputRoom.xml"
     saveFolder = "Bitmaps/InputRooms"
     convert_xml_to_bitmap(initXml, saveFolder)
-
+    inputRoomNumber = 0
     for filename in os.listdir(saveFolder):
         path = saveFolder + "/" + filename
         bitmap = load_bitmap(path)
-        room_mutation_ea = TBoI_Room_Mutation(bitmap)
-        mutations, fitness_history = calculate_mutations_for_room(room_mutation_ea)
-        save_room_mutations_for_room("Bitmaps/Mutations/" + filename, mutations)
-        plot_progress(fitness_history, filename=f"fitness_progress_{filename}.png")
+        inputRoomNumber += 1
+        for i in range(10):
+            logging.info(f"Generating mutations {i+1} for room {inputRoomNumber}")
+            start_time = time.time()
+            room_mutation_ea = TBoI_Room_Mutation(bitmap)
+            mutations, fitness_history = calculate_mutations_for_room(room_mutation_ea)
+            save_room_mutations_for_room("Bitmaps/Mutations/" + filename, mutations, i)
+            elapsed_time = time.time() - start_time
+            logging.info(f"Time used for it : {elapsed_time:.2f} sec")
     
     convert_generated_bitmaps_to_xml(initXml)
 

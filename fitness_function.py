@@ -41,6 +41,25 @@ class Fitness_Function:
         # Use the optimized is_path_existent method
         return self.resultBitmap.is_path_existent(firstDoor, targets)
     
+    def check_spawn(self):
+        pixelValue1 = self.resultBitmap.bitmap.getpixel((7, 1))
+        entity_id1 = self.resultBitmap.get_entity_id_with_pixel_value(pixelValue1)
+        if(entity_id1 != EntityType.FREE_SPACE):
+            return False
+        pixelValue2 = self.resultBitmap.bitmap.getpixel((7, 7))
+        entity_id2 = self.resultBitmap.get_entity_id_with_pixel_value(pixelValue2)
+        if(entity_id2 != EntityType.FREE_SPACE):
+            return False
+        pixelValue3 = self.resultBitmap.bitmap.getpixel((1, 4))
+        entity_id3 = self.resultBitmap.get_entity_id_with_pixel_value(pixelValue3)
+        if(entity_id3 != EntityType.FREE_SPACE):
+            return False
+        pixelValue4 = self.resultBitmap.bitmap.getpixel((13, 4))
+        entity_id4 = self.resultBitmap.get_entity_id_with_pixel_value(pixelValue4)
+        if(entity_id4 != EntityType.FREE_SPACE):
+            return False
+        return True
+    
     def pixel_variation_score(self):
         bitmap = self.resultBitmap
         width, height = bitmap.bitmap.size
@@ -159,7 +178,9 @@ class Fitness_Function:
     def calc_fitness_function(self):
         value = 0
         total_weight = Constants.FITNESS_WEIGHT_BALANCE + Constants.FITNESS_WEIGHT_CHANGES + Constants.FITNESS_WEIGHT_ENEMIES + Constants.FITNESS_WEIGHT_SYMMETRY + Constants.FITNESS_WEIGHT_VARIATION
-        if(not self.check_every_traversability()):
+        if(not self.check_every_traversability() ):
+            self.functionValue = 0
+        elif(not self.check_spawn()):
             self.functionValue = 0
         else:
             value = (Constants.FITNESS_WEIGHT_BALANCE * self.balance_freespace_and_entities()) + (Constants.FITNESS_WEIGHT_CHANGES * self.bitmap_changes()) + (Constants.FITNESS_WEIGHT_ENEMIES * self.enemy_difference_value()) +  (Constants.FITNESS_WEIGHT_SYMMETRY * self.symmetry_score()) + (Constants.FITNESS_WEIGHT_VARIATION * self.pixel_variation_score())
