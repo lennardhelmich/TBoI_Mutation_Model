@@ -91,7 +91,7 @@ def plot_progress(fitness_history, filename="fitness_progress.png"):
 
 
 if __name__ == "__main__":
-    initXml = "Rooms/FirstInputRoom.xml"
+    initXml = "Rooms/First_20_Rooms_For_Dataset.xml"
     saveFolder = "Bitmaps/InputRooms"
     convert_xml_to_bitmap(initXml, saveFolder)
     inputRoomNumber = 0
