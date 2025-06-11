@@ -4,9 +4,8 @@ import torch.optim as optim
 from torch.utils.data import Dataset, DataLoader
 import os
 from PIL import Image
-from tboi_bitmap import TBoI_Bitmap
+from tboi_bitmap import TBoI_Bitmap, EntityType
 import numpy as np
-from tboi_bitmap import EntityType
 
 NUM_CLASSES = 12
 
@@ -14,7 +13,6 @@ class MutationDataset(Dataset):
     def __init__(self, data_folder):
         self.inputs = []
         self.mutated = []
-        self.fitness = []
 
         input_rooms_folder = os.path.join(os.path.dirname(data_folder), "InputRooms")
         input_files = sorted([f for f in os.listdir(input_rooms_folder) if f.endswith(".bmp")])
@@ -25,14 +23,14 @@ class MutationDataset(Dataset):
             input_path = os.path.join(input_rooms_folder, input_file)
             input_img = Image.open(input_path).convert("L")
             input_arr = np.array(input_img)
-            input_arr = input_arr[1:-1, 1:-1]  # von 15x9 auf 13x7
+            input_arr = input_arr[1:-1, 1:-1]
 
             for i in range(input_arr.shape[0]):
                 for j in range(input_arr.shape[1]):
                     entity = tboi_bitmap.get_entity_id_with_pixel_value(input_arr[i, j])
                     input_arr[i, j] = entity.value
 
-            input_arr = input_arr[np.newaxis, :, :]  # [1, 13, 7]
+            input_arr = input_arr[np.newaxis, :, :]
 
             mutation_folder = os.path.join(data_folder,"Mutations", input_file.replace("bitmap_", "bitmap_").replace(".bmp", ""))
             if not os.path.isdir(mutation_folder):
@@ -42,13 +40,12 @@ class MutationDataset(Dataset):
                 mpath = os.path.join(mutation_folder, mfile)
                 mimg = Image.open(mpath).convert("L")
                 marr = np.array(mimg)
-                marr = marr[1:-1, 1:-1]  # von 15x9 auf 13x7
+                marr = marr[1:-1, 1:-1]
 
                 for i in range(marr.shape[0]):
                     for j in range(marr.shape[1]):
                         entity = tboi_bitmap.get_entity_id_with_pixel_value(marr[i, j])
                         marr[i, j] = entity.value
-                # Extract fitness from filename: e.g. mutation_0_0,908.bmp
 
                 fitness_str = mfile.split("_")[-1].replace(".bmp", "").replace(",", ".")
                 try:
@@ -58,73 +55,121 @@ class MutationDataset(Dataset):
                 
                 self.inputs.append(input_arr)
                 self.mutated.append(marr)
-                self.fitness.append(fitness_val)
 
         self.inputs = torch.tensor(np.stack(self.inputs), dtype=torch.float32)
         self.mutated = torch.tensor(np.stack(self.mutated), dtype=torch.long)
-        self.fitness = torch.tensor(self.fitness, dtype=torch.float32)
 
     def __len__(self):
         return len(self.inputs)
 
     def __getitem__(self, idx):
-        return self.inputs[idx], self.mutated[idx], self.fitness[idx]
+        return self.inputs[idx], self.mutated[idx]
 
-# Generator: Eingabe-Bitmap -> Mutierte Bitmap (als Klassen)
 class Generator(nn.Module):
     def __init__(self):
         super().__init__()
         self.model = nn.Sequential(
             nn.Flatten(),
-            nn.Linear(13*7, 128),
+            nn.Linear(13*7*2, 128),
             nn.ReLU(),
             nn.Linear(128, 13*7*NUM_CLASSES),
         )
 
-    def forward(self, x):
+    def forward(self, x, cond):
+        x = torch.cat([x, cond], dim=1)
+        x = x.view(x.size(0), -1)
         x = self.model(x)
-        x = x.view(-1, NUM_CLASSES, 13, 7)  # [batch, classes, 13, 7]
-        return x  # logits, noch kein Softmax!
+        x = x.view(-1, NUM_CLASSES, 13, 7)
+        return x
 
-# Training-Loop (stark vereinfacht)
-def train_gan():
+class Discriminator(nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.model = nn.Sequential(
+            nn.Flatten(),
+            nn.Linear(2*13*7, 128),
+            nn.LeakyReLU(0.2),
+            nn.Linear(128, 1),
+            nn.Sigmoid(),
+        )
+
+    def forward(self, cond, y):
+        x = torch.cat([cond, y], dim=1)
+        x = x.view(x.size(0), -1)
+        return self.model(x)
+
+def train_cgan():
     dataset = MutationDataset("Bitmaps/")
     dataloader = DataLoader(dataset, batch_size=32, shuffle=True)
 
     G = Generator()
-    criterion = nn.CrossEntropyLoss()  # Für Klassifikation pro Pixel
+    D = Discriminator()
+    l1_loss = nn.L1Loss()
+    bce_loss = nn.BCELoss()
     optimizer_G = optim.Adam(G.parameters(), lr=0.0002)
+    optimizer_D = optim.Adam(D.parameters(), lr=0.0002)
 
     for epoch in range(100):
-        for input_bmp, mutated_bmp, fitness in dataloader:
+        use_adv = epoch >= 10
+        train_D = use_adv and (epoch % 5 == 0)
+        for input_bmp, mutated_bmp in dataloader:
+            input_bmp = input_bmp.float()
+            mutated_bmp = mutated_bmp.unsqueeze(1).float()
+
+            if train_D:
+                optimizer_D.zero_grad()
+                real_labels = torch.ones(input_bmp.size(0), 1)
+                fake_labels = torch.zeros(input_bmp.size(0), 1)
+
+                output_real = D(input_bmp, mutated_bmp)
+                loss_real = bce_loss(output_real, real_labels)
+
+                logits_fake = G(torch.zeros_like(input_bmp), input_bmp)
+                pred_fake = torch.argmax(logits_fake, dim=1).unsqueeze(1).float().permute(0, 1, 3, 2)
+                output_fake = D(input_bmp, pred_fake.detach())
+                loss_fake = bce_loss(output_fake, fake_labels)
+
+                loss_D = (loss_real + loss_fake) / 2
+                loss_D.backward()
+                optimizer_D.step()
+
             optimizer_G.zero_grad()
-            logits = G(input_bmp.float())  # [batch, classes, 13, 7]
-            mutated_bmp = mutated_bmp.permute(0, 2, 1)  # [batch, 13, 7]
-            loss = criterion(logits, mutated_bmp.long())  # mutated_bmp: [batch, 13, 7]
-            loss.backward()
+            logits_fake = G(torch.zeros_like(input_bmp), input_bmp)
+            pred_fake = torch.argmax(logits_fake, dim=1).unsqueeze(1).float().permute(0, 1, 3, 2)
+            probs = torch.softmax(logits_fake, dim=1)
+            expected = torch.sum(probs * torch.arange(NUM_CLASSES, device=probs.device).view(1, -1, 1, 1), dim=1, keepdim=True)
+            if expected.shape != mutated_bmp.shape:
+                if expected.shape[2] == mutated_bmp.shape[3] and expected.shape[3] == mutated_bmp.shape[2]:
+                    expected = expected.permute(0, 1, 3, 2)
+            l1 = l1_loss(expected, mutated_bmp)
+            if train_D:
+                output_fake = D(input_bmp, pred_fake)
+                adv_loss = bce_loss(output_fake, real_labels)
+                loss_G = adv_loss + 10 * l1
+            else:
+                loss_G = 10 * l1
+            loss_G.backward()
             optimizer_G.step()
-        print(f"Epoch {epoch}: Loss_G={loss.item():.4f}")
 
-    # Beispiel: Mutierte Bitmap generieren (als Integer-Matrix)
+        if use_adv:
+            print(f"Epoch {epoch}: Loss_D={loss_D.item():.4f}, Loss_G={loss_G.item():.4f}")
+        else:
+            print(f"Epoch {epoch}: Loss_G={loss_G.item():.4f} (nur L1)")
+
     with torch.no_grad():
-        logits = G(input_bmp.float())
-        pred = torch.argmax(logits, dim=1)  # [batch, 13, 7], Werte 0-7
-    
-    os.makedirs("Bitmaps/GAN", exist_ok=True)
-    tboi_bitmap = TBoI_Bitmap(width=13, height=7)
-
-    for idx in range(pred.shape[0]):
-        arr = pred[idx].cpu().numpy()  # [13, 7]
-        img = TBoI_Bitmap(width=13, height=7)
-        for x in range(13):
-            for y in range(7):
-                # arr[x, y] ist der EntityType-Index
-                entity_id = EntityType(arr[x, y])
-                pixel_value = tboi_bitmap.get_pixel_value_with_entity_id(entity_id)
-                img.bitmap.putpixel((x, y), pixel_value)
-        img.save_bitmap_in_folder(idx, "Bitmaps/GAN")
-    
-    index = 0
+        logits = G(torch.zeros_like(input_bmp), input_bmp)
+        pred = torch.argmax(logits, dim=1)
+        os.makedirs("Bitmaps/GAN", exist_ok=True)
+        tboi_bitmap = TBoI_Bitmap(width=13, height=7)
+        for idx in range(pred.shape[0]):
+            arr = pred[idx].cpu().numpy()
+            img = TBoI_Bitmap(width=13, height=7)
+            for x in range(13):
+                for y in range(7):
+                    entity_id = EntityType(arr[x, y])
+                    pixel_value = tboi_bitmap.get_pixel_value_with_entity_id(entity_id)
+                    img.bitmap.putpixel((x, y), pixel_value)
+            img.save_bitmap_in_folder(idx, "Bitmaps/GAN")
 
 if __name__ == "__main__":
-    train_gan()
+    train_cgan()
