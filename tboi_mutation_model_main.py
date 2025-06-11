@@ -82,16 +82,30 @@ def save_room_mutations_for_room(room_path, room_mutations, offset):
         index+=1
 
 def plot_progress(fitness_history, filename="fitness_progress.png"):
-    plt.plot(fitness_history)
+    """
+    fitness_history: List of lists, each inner list is functionValue of best individual per generation
+    """
+    fitness_history = np.array(fitness_history)  # shape: [num_generations, num_metrics]
+    labels = [
+        "Gesamtfitness",
+        "Balance",
+        "Bitmap Changes",
+        "Enemies",
+        "Symmetry",
+        "Variation"
+    ]
+    for i in range(fitness_history.shape[1]):
+        plt.plot(fitness_history[:, i], label=labels[i])
     plt.xlabel("Generation")
-    plt.ylabel("Best Fitness")
-    plt.title("Fitness Progress")
+    plt.ylabel("Fitness")
+    plt.title("Fitness Progress (alle Komponenten)")
+    plt.legend()
     plt.savefig(filename)
     plt.close()
 
 
 if __name__ == "__main__":
-    initXml = "Rooms/First_20_Rooms_For_Dataset.xml"
+    initXml = "Rooms/FirstInputRoom.xml"
     saveFolder = "Bitmaps/InputRooms"
     convert_xml_to_bitmap(initXml, saveFolder)
     inputRoomNumber = 0
@@ -105,6 +119,7 @@ if __name__ == "__main__":
             room_mutation_ea = TBoI_Room_Mutation(bitmap)
             mutations, fitness_history = calculate_mutations_for_room(room_mutation_ea)
             save_room_mutations_for_room("Bitmaps/Mutations/" + filename, mutations, i)
+            plot_progress(fitness_history, f"fitness_progress_{inputRoomNumber}_{i+1}.png")
             elapsed_time = time.time() - start_time
             logging.info(f"Time used for it : {elapsed_time:.2f} sec")
     

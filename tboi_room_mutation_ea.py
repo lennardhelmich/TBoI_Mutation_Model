@@ -48,7 +48,7 @@ class TBoI_Room_Mutation:
     def fitness_function(self, individual):
         fitness = Fitness_Function(startBitmap=self.startBitmap, resultBitmap=individual)
         fitness.calc_fitness_function()
-        return fitness.functionValue,
+        return fitness.functionValue[0],
 
     def make_fitness_function(self):
         return self.fitness_function
@@ -164,8 +164,13 @@ class TBoI_Room_Mutation:
                     ind.fitness.values = fit
 
                 population[:] = offspring
-                best_fitness = max(ind.fitness.values[0] for ind in population)
-                fitness_history.append(best_fitness)
+                best_ind = max(population, key=lambda ind: ind.fitness.values[0])
+                best_fitness = best_ind.fitness.values[0]
+                # Recalculate fitness to track every part of the Fitness Function
+                fitness_obj = Fitness_Function(startBitmap=self.startBitmap, resultBitmap=best_ind)
+                fitness_obj.calc_fitness_function()
+                # Optionally, store the full fitness object or its details
+                fitness_history.append(list(fitness_obj.functionValue))
         finally:
             pool.close()
             pool.join()

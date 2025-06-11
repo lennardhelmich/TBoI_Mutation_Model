@@ -18,7 +18,7 @@ class Fitness_Function:
 
         self.startBitmap = start_tboi_bitmap
         self.resultBitmap = result_tboi_bitmap
-        self.functionValue = 0
+        self.functionValue = []
 
     def check_every_traversability(self):
         doors = []
@@ -179,13 +179,30 @@ class Fitness_Function:
         value = 0
         total_weight = Constants.FITNESS_WEIGHT_BALANCE + Constants.FITNESS_WEIGHT_CHANGES + Constants.FITNESS_WEIGHT_ENEMIES + Constants.FITNESS_WEIGHT_SYMMETRY + Constants.FITNESS_WEIGHT_VARIATION
         if(not self.check_every_traversability() ):
-            self.functionValue = 0
+            self.functionValue = [0, 0, 0, 0, 0, 0]
         elif(not self.check_spawn()):
-            self.functionValue = 0
+            self.functionValue = [0, 0, 0, 0, 0, 0]
         else:
-            value = (Constants.FITNESS_WEIGHT_BALANCE * self.balance_freespace_and_entities()) + (Constants.FITNESS_WEIGHT_CHANGES * self.bitmap_changes()) + (Constants.FITNESS_WEIGHT_ENEMIES * self.enemy_difference_value()) +  (Constants.FITNESS_WEIGHT_SYMMETRY * self.symmetry_score()) + (Constants.FITNESS_WEIGHT_VARIATION * self.pixel_variation_score())
-            standardized_value = value/(total_weight)
-            self.functionValue = standardized_value
+            balance = self.balance_freespace_and_entities()
+            bitmap_changes = self.bitmap_changes()
+            enemies = self.enemy_difference_value()
+            symmetry = self.symmetry_score()
+            variation = self.pixel_variation_score()
+            value = (
+                Constants.FITNESS_WEIGHT_BALANCE * balance
+                + Constants.FITNESS_WEIGHT_CHANGES * bitmap_changes
+                + Constants.FITNESS_WEIGHT_ENEMIES * enemies
+                + Constants.FITNESS_WEIGHT_SYMMETRY * symmetry
+                + Constants.FITNESS_WEIGHT_VARIATION * variation
+            )
+            standardized_value = value / total_weight
+            self.functionValue = [
+                standardized_value,
+                balance,
+                bitmap_changes,
+                enemies,
+                symmetry,
+                variation]
 
 
 if __name__ == "__main__":
