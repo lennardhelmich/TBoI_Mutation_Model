@@ -23,14 +23,14 @@ class MutationDataset(Dataset):
             input_path = os.path.join(input_rooms_folder, input_file)
             input_img = Image.open(input_path).convert("L")
             input_arr = np.array(input_img)
-            input_arr = input_arr[1:-1, 1:-1]  # 13x7
+            input_arr = input_arr[1:-1, 1:-1]
 
             for i in range(input_arr.shape[0]):
                 for j in range(input_arr.shape[1]):
                     entity = tboi_bitmap.get_entity_id_with_pixel_value(input_arr[i, j])
                     input_arr[i, j] = entity.value
 
-            input_arr = input_arr[np.newaxis, :, :]  # [1, 13, 7]
+            input_arr = input_arr[np.newaxis, :, :]
 
             mutation_folder = os.path.join(data_folder, "Mutations", input_file.replace("bitmap_", "bitmap_").replace(".bmp", ""))
             if not os.path.isdir(mutation_folder):
@@ -132,7 +132,7 @@ def train_vae():
             img.save_bitmap_in_folder(idx, "Bitmaps/VAE")
 
     input_img = Image.open(os.path.join("Bitmaps", "InputRooms", "bitmap_0.bmp")).convert("L")
-    input_arr = np.array(input_img)[1:-1, 1:-1]  # 13x7
+    input_arr = np.array(input_img)[1:-1, 1:-1]
     tboi_bitmap = TBoI_Bitmap()
     for i in range(input_arr.shape[0]):
         for j in range(input_arr.shape[1]):

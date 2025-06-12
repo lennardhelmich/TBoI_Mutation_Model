@@ -85,7 +85,7 @@ def plot_progress(fitness_history, filename="fitness_progress.png"):
     """
     fitness_history: List of lists, each inner list is functionValue of best individual per generation
     """
-    fitness_history = np.array(fitness_history)  # shape: [num_generations, num_metrics]
+    fitness_history = np.array(fitness_history)
     labels = [
         "Gesamtfitness",
         "Balance",
@@ -100,7 +100,8 @@ def plot_progress(fitness_history, filename="fitness_progress.png"):
     plt.ylabel("Fitness")
     plt.title("Fitness Progress (alle Komponenten)")
     plt.legend()
-    plt.savefig(filename)
+    os.makedirs("Plots", exist_ok=True)
+    plt.savefig(os.path.join("Plots", filename))
     plt.close()
 
 
@@ -113,7 +114,7 @@ if __name__ == "__main__":
         path = saveFolder + "/" + filename
         bitmap = load_bitmap(path)
         inputRoomNumber += 1
-        for i in range(10):
+        for i in range(5):
             logging.info(f"Generating mutations {i+1} for room {inputRoomNumber}")
             start_time = time.time()
             room_mutation_ea = TBoI_Room_Mutation(bitmap)

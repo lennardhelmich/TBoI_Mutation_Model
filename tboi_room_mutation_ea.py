@@ -83,8 +83,23 @@ class TBoI_Room_Mutation:
         return self.mutate_pixel
     
     def mate_bitmaps(self, ind1, ind2):
-        crossover_point = random.randint(1, min(len(ind1), len(ind2)) - 1) 
-        ind1[:crossover_point], ind2[:crossover_point] = ind2[:crossover_point], ind1[:crossover_point]
+        crossover_type = random.choice([1, 2])
+        direction = random.choice(['forward', 'reverse'])
+
+        if crossover_type == 1:
+            # Row-wise crossover
+            crossover_point = random.randint(1, min(len(ind1), len(ind2)) - 1)
+            if direction == 'forward':
+                ind1[:crossover_point], ind2[:crossover_point] = ind2[:crossover_point], ind1[:crossover_point]
+                ind1[-crossover_point:], ind2[-crossover_point:] = ind2[-crossover_point:], ind1[-crossover_point:]
+        else:
+            num_cols = min(len(ind1[0]), len(ind2[0]))
+            crossover_point = random.randint(1, num_cols - 1)
+            if direction == 'forward':
+                for row1, row2 in zip(ind1, ind2):
+                    row1[:crossover_point], row2[:crossover_point] = row2[:crossover_point], row1[:crossover_point]
+                for row1, row2 in zip(ind1, ind2):
+                    row1[-crossover_point:], row2[-crossover_point:] = row2[-crossover_point:], row1[-crossover_point:]
 
     def make_mate_function(self):
         return self.mate_bitmaps
@@ -129,7 +144,7 @@ class TBoI_Room_Mutation:
     def calculate_mutations(self, NGEN, CXPB, MUTPB, popSize, numElites):
         fitness_history = []
 
-        pool = multiprocessing.Pool()  # Create the pool
+        pool = multiprocessing.Pool()
         try:
             population = self.toolbox.population(n=popSize)
             fits = list(pool.map(self.toolbox.evaluate, population))
@@ -166,10 +181,8 @@ class TBoI_Room_Mutation:
                 population[:] = offspring
                 best_ind = max(population, key=lambda ind: ind.fitness.values[0])
                 best_fitness = best_ind.fitness.values[0]
-                # Recalculate fitness to track every part of the Fitness Function
                 fitness_obj = Fitness_Function(startBitmap=self.startBitmap, resultBitmap=best_ind)
                 fitness_obj.calc_fitness_function()
-                # Optionally, store the full fitness object or its details
                 fitness_history.append(list(fitness_obj.functionValue))
         finally:
             pool.close()
