@@ -106,7 +106,7 @@ def plot_progress(fitness_history, filename="fitness_progress.png"):
 
 
 if __name__ == "__main__":
-    initXml = "Rooms/FirstInputRoom.xml"
+    initXml = "Rooms/First_20_Rooms_For_Dataset.xml"
     saveFolder = "Bitmaps/InputRooms"
     convert_xml_to_bitmap(initXml, saveFolder)
     inputRoomNumber = 0
@@ -114,13 +114,14 @@ if __name__ == "__main__":
         path = saveFolder + "/" + filename
         bitmap = load_bitmap(path)
         inputRoomNumber += 1
-        for i in range(5):
+        for i in range(250):
             logging.info(f"Generating mutations {i+1} for room {inputRoomNumber}")
             start_time = time.time()
             room_mutation_ea = TBoI_Room_Mutation(bitmap)
             mutations, fitness_history = calculate_mutations_for_room(room_mutation_ea)
             save_room_mutations_for_room("Bitmaps/Mutations/" + filename, mutations, i)
-            plot_progress(fitness_history, f"fitness_progress_{inputRoomNumber}_{i+1}.png")
+            if(i%50 == 0):
+                plot_progress(fitness_history, f"fitness_progress_{inputRoomNumber}_{i+1}.png")
             elapsed_time = time.time() - start_time
             logging.info(f"Time used for it : {elapsed_time:.2f} sec")
     

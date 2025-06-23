@@ -6,6 +6,8 @@ import os
 from PIL import Image
 from tboi_bitmap import TBoI_Bitmap, EntityType
 import numpy as np
+import optuna
+import matplotlib.pyplot as plt
 
 NUM_CLASSES = 12
 
@@ -171,5 +173,78 @@ def train_cgan():
                     img.bitmap.putpixel((x, y), pixel_value)
             img.save_bitmap_in_folder(idx, "Bitmaps/GAN")
 
+def objective(trial):
+    lr_g = trial.suggest_loguniform('lr_g', 1e-5, 1e-2)
+    lr_d = trial.suggest_loguniform('lr_d', 1e-5, 1e-2)
+    l1_weight = trial.suggest_float('l1_weight', 1, 100)
+    batch_size = trial.suggest_categorical('batch_size', [16, 32, 64])
+
+    dataset = MutationDataset("Bitmaps/")
+    dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=True)
+
+    G = Generator()
+    D = Discriminator()
+    l1_loss = nn.L1Loss()
+    bce_loss = nn.BCELoss()
+    optimizer_G = optim.Adam(G.parameters(), lr=lr_g)
+    optimizer_D = optim.Adam(D.parameters(), lr=lr_d)
+
+    best_val_loss = float('inf')
+    epoch_losses = []
+
+    for epoch in range(20):
+        for input_bmp, mutated_bmp in dataloader:
+            input_bmp = input_bmp.float()
+            mutated_bmp = mutated_bmp.unsqueeze(1).float()
+
+            optimizer_D.zero_grad()
+            real_labels = torch.ones(input_bmp.size(0), 1)
+            fake_labels = torch.zeros(input_bmp.size(0), 1)
+
+            output_real = D(input_bmp, mutated_bmp)
+            loss_real = bce_loss(output_real, real_labels)
+
+            logits_fake = G(torch.zeros_like(input_bmp), input_bmp)
+            pred_fake = torch.argmax(logits_fake, dim=1).unsqueeze(1).float().permute(0, 1, 3, 2)
+            output_fake = D(input_bmp, pred_fake.detach())
+            loss_fake = bce_loss(output_fake, fake_labels)
+
+            loss_D = (loss_real + loss_fake) / 2
+            loss_D.backward()
+            optimizer_D.step()
+
+            optimizer_G.zero_grad()
+            logits_fake = G(torch.zeros_like(input_bmp), input_bmp)
+            pred_fake = torch.argmax(logits_fake, dim=1).unsqueeze(1).float().permute(0, 1, 3, 2)
+            probs = torch.softmax(logits_fake, dim=1)
+            expected = torch.sum(probs * torch.arange(NUM_CLASSES, device=probs.device).view(1, -1, 1, 1), dim=1, keepdim=True)
+            if expected.shape != mutated_bmp.shape:
+                if expected.shape[2] == mutated_bmp.shape[3] and expected.shape[3] == mutated_bmp.shape[2]:
+                    expected = expected.permute(0, 1, 3, 2)
+            l1 = l1_loss(expected, mutated_bmp)
+            adv_loss = bce_loss(D(input_bmp, pred_fake), real_labels)
+            loss_G = adv_loss + l1_weight * l1
+            loss_G.backward()
+            optimizer_G.step()
+
+        epoch_losses.append(loss_G.item())
+        trial.report(loss_G.item(), epoch)
+        if trial.should_prune():
+            raise optuna.TrialPruned()
+
+        if loss_G.item() < best_val_loss:
+            best_val_loss = loss_G.item()
+
+    epoch_losses.append(0)
+    epoch_losses.append(lr_d)
+    epoch_losses.append(lr_g)
+    epoch_losses.append(l1_weight)
+    epoch_losses.append(batch_size)
+    np.save(f"Optuna/GAN/optuna_trial_{trial.number}_losses.npy", np.array(epoch_losses))
+
+    return best_val_loss
+
 if __name__ == "__main__":
-    train_cgan()
+    study = optuna.create_study(direction='minimize')
+    study.optimize(objective, n_trials=20)
+    print("Beste Hyperparameter:", study.best_params)

@@ -1,9 +1,10 @@
+import optuna
+import numpy as np
+import os
 import torch
 import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import Dataset, DataLoader
-import os
-import numpy as np
 from PIL import Image
 from tboi_bitmap import TBoI_Bitmap, EntityType
 
@@ -156,5 +157,47 @@ def train_vae():
                 img.bitmap.putpixel((x, y), pixel_value)
         img.save_bitmap_in_folder(f"new_{new_idx}", "Bitmaps/VAE")
 
+def objective(trial):
+    # Hyperparameter search space
+    lr = trial.suggest_loguniform('lr', 1e-5, 1e-2)
+    latent_dim = trial.suggest_categorical('latent_dim', [8, 16, 32, 64, 128])
+    batch_size = trial.suggest_categorical('batch_size', [16, 32, 64])
+
+    dataset = MutationDataset("Bitmaps/")
+    dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=True)
+
+    vae = VAE(latent_dim=latent_dim)
+    optimizer = optim.Adam(vae.parameters(), lr=lr)
+
+    best_loss = float('inf')
+    epoch_losses = []
+
+    for epoch in range(20):  # Fewer epochs for Optuna
+        for input_bmp, mutated_bmp in dataloader:
+            optimizer.zero_grad()
+            mutated_bmp = mutated_bmp.permute(0, 2, 1)
+            recon_logits, mu, logvar = vae(input_bmp.float())
+            loss = vae_loss(recon_logits, mutated_bmp.long(), mu, logvar)
+            loss.backward()
+            optimizer.step()
+        epoch_losses.append(loss.item())
+        trial.report(loss.item(), epoch)
+        if trial.should_prune():
+            raise optuna.TrialPruned()
+        if loss.item() < best_loss:
+            best_loss = loss.item()
+
+    # Save losses and hyperparameters for analysis
+    os.makedirs("Optuna/VAE", exist_ok=True)
+    epoch_losses.append(0)
+    epoch_losses.append(lr)
+    epoch_losses.append(latent_dim)
+    epoch_losses.append(batch_size)
+    np.save(f"Optuna/VAE/optuna_trial_{trial.number}_losses.npy", np.array(epoch_losses))
+
+    return best_loss
+
 if __name__ == "__main__":
-    train_vae()
+    study = optuna.create_study(direction='minimize')
+    study.optimize(objective, n_trials=20)
+    print("Beste Hyperparameter:", study.best_params)

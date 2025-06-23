@@ -17,7 +17,7 @@ class Constants:
     CROSSOVER_PROBABILITY = 0.4
     MUTATION_PROBABILITY = 1
     POPULATION_SIZE = 100
-    NUMBER_ELITES = 25
+    NUMBER_ELITES = 20
 
     #Tile probability 
     PROB_FREE_SPACE = 30
