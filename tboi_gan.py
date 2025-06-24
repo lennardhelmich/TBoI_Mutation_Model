@@ -246,5 +246,5 @@ def objective(trial):
 
 if __name__ == "__main__":
     study = optuna.create_study(direction='minimize')
-    study.optimize(objective, n_trials=20)
+    study.optimize(objective, n_trials=50, n_jobs=4)
     print("Beste Hyperparameter:", study.best_params)

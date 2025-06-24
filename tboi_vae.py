@@ -158,7 +158,6 @@ def train_vae():
         img.save_bitmap_in_folder(f"new_{new_idx}", "Bitmaps/VAE")
 
 def objective(trial):
-    # Hyperparameter search space
     lr = trial.suggest_loguniform('lr', 1e-5, 1e-2)
     latent_dim = trial.suggest_categorical('latent_dim', [8, 16, 32, 64, 128])
     batch_size = trial.suggest_categorical('batch_size', [16, 32, 64])
@@ -172,7 +171,7 @@ def objective(trial):
     best_loss = float('inf')
     epoch_losses = []
 
-    for epoch in range(20):  # Fewer epochs for Optuna
+    for epoch in range(20):
         for input_bmp, mutated_bmp in dataloader:
             optimizer.zero_grad()
             mutated_bmp = mutated_bmp.permute(0, 2, 1)
@@ -187,7 +186,6 @@ def objective(trial):
         if loss.item() < best_loss:
             best_loss = loss.item()
 
-    # Save losses and hyperparameters for analysis
     os.makedirs("Optuna/VAE", exist_ok=True)
     epoch_losses.append(0)
     epoch_losses.append(lr)

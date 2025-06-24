@@ -120,7 +120,7 @@ if __name__ == "__main__":
             room_mutation_ea = TBoI_Room_Mutation(bitmap)
             mutations, fitness_history = calculate_mutations_for_room(room_mutation_ea)
             save_room_mutations_for_room("Bitmaps/Mutations/" + filename, mutations, i)
-            if(i%50 == 0):
+            if(i%25 == 0):
                 plot_progress(fitness_history, f"fitness_progress_{inputRoomNumber}_{i+1}.png")
             elapsed_time = time.time() - start_time
             logging.info(f"Time used for it : {elapsed_time:.2f} sec")
