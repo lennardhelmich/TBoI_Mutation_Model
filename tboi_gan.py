@@ -8,6 +8,7 @@ from tboi_bitmap import TBoI_Bitmap, EntityType
 import numpy as np
 import optuna
 import matplotlib.pyplot as plt
+import re
 
 NUM_CLASSES = 12
 
@@ -246,5 +247,5 @@ def objective(trial):
 
 if __name__ == "__main__":
     study = optuna.create_study(direction='minimize')
-    study.optimize(objective, n_trials=50, n_jobs=4)
+    study.optimize(objective, n_trials=250, n_jobs=8)
     print("Beste Hyperparameter:", study.best_params)
