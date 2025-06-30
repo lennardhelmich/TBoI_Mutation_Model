@@ -158,8 +158,8 @@ def train_vae():
         img.save_bitmap_in_folder(f"new_{new_idx}", "Bitmaps/VAE")
 
 def objective(trial):
-    lr = trial.suggest_loguniform('lr', 1e-5, 1e-2)
-    latent_dim = trial.suggest_categorical('latent_dim', [8, 16, 32, 64, 128])
+    lr = trial.suggest_loguniform('lr', 1e-4, 1e-2)
+    latent_dim = trial.suggest_categorical('latent_dim', [32, 64, 128])
     batch_size = trial.suggest_categorical('batch_size', [16, 32, 64])
 
     dataset = MutationDataset("Bitmaps/")
@@ -171,7 +171,7 @@ def objective(trial):
     best_loss = float('inf')
     epoch_losses = []
 
-    for epoch in range(20):
+    for epoch in range(50):
         for input_bmp, mutated_bmp in dataloader:
             optimizer.zero_grad()
             mutated_bmp = mutated_bmp.permute(0, 2, 1)
@@ -197,5 +197,5 @@ def objective(trial):
 
 if __name__ == "__main__":
     study = optuna.create_study(direction='minimize')
-    study.optimize(objective, n_trials=20)
+    study.optimize(objective, n_trials=200, n_jobs=8)
     print("Beste Hyperparameter:", study.best_params)

@@ -175,9 +175,9 @@ def train_cgan():
             img.save_bitmap_in_folder(idx, "Bitmaps/GAN")
 
 def objective(trial):
-    lr_g = trial.suggest_loguniform('lr_g', 1e-5, 1e-2)
+    lr_g = trial.suggest_loguniform('lr_g', 1e-5, 2e-3)
     lr_d = trial.suggest_loguniform('lr_d', 1e-5, 1e-2)
-    l1_weight = trial.suggest_float('l1_weight', 1, 100)
+    l1_weight = trial.suggest_float('l1_weight', 1, 20)
     batch_size = trial.suggest_categorical('batch_size', [16, 32, 64])
 
     dataset = MutationDataset("Bitmaps/")
@@ -193,7 +193,7 @@ def objective(trial):
     best_val_loss = float('inf')
     epoch_losses = []
 
-    for epoch in range(20):
+    for epoch in range(50):
         for input_bmp, mutated_bmp in dataloader:
             input_bmp = input_bmp.float()
             mutated_bmp = mutated_bmp.unsqueeze(1).float()
@@ -247,5 +247,5 @@ def objective(trial):
 
 if __name__ == "__main__":
     study = optuna.create_study(direction='minimize')
-    study.optimize(objective, n_trials=250, n_jobs=8)
+    study.optimize(objective, n_trials=200, n_jobs=8)
     print("Beste Hyperparameter:", study.best_params)
