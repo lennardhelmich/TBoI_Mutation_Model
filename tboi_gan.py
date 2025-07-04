@@ -176,9 +176,9 @@ def train_cgan():
 
 def objective(trial):
     lr_g = trial.suggest_loguniform('lr_g', 1e-5, 2e-3)
-    lr_d = trial.suggest_loguniform('lr_d', 1e-5, 1e-2)
-    l1_weight = trial.suggest_float('l1_weight', 1, 20)
-    batch_size = trial.suggest_categorical('batch_size', [16, 32, 64])
+    lr_d = trial.suggest_loguniform('lr_d', 5e-3, 1e-2)
+    l1_weight = trial.suggest_float('l1_weight', 1, 2)
+    batch_size = trial.suggest_categorical('batch_size', [16, 64])
 
     dataset = MutationDataset("Bitmaps/")
     dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=True)
