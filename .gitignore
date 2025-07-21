@@ -4,6 +4,8 @@ __pycache__/*
 Bitmaps/InputRooms/*
 Bitmaps/PathfindingTest/*
 Bitmaps/Mutations/*
+Bitmaps/Inverted_Mutations/*
+tb_logs/*
 OutputXmls/*
 Rooms/*
 XAMLTEST

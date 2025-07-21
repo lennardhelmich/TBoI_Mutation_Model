@@ -1,251 +1,284 @@
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+"""
+tboi_gan.py
+
+BicycleGAN für 13×7 px 1‑Kanal‑BMPs in verschachtelter Ordnerstruktur.
+Validation ist komplett aus—kein CombinedLoader mehr.
+"""
+from __future__ import annotations
+import argparse
+from pathlib import Path
+
 import torch
 import torch.nn as nn
-import torch.optim as optim
-from torch.utils.data import Dataset, DataLoader
-import os
+import torch.nn.functional as F
 from PIL import Image
-from tboi_bitmap import TBoI_Bitmap, EntityType
-import numpy as np
-import optuna
-import matplotlib.pyplot as plt
-import re
+import torchvision.transforms as T
+from torch.utils.data import Dataset, DataLoader
 
-NUM_CLASSES = 12
+from lightning import LightningModule, Trainer, seed_everything
+from lightning.pytorch import LightningDataModule
+from lightning.pytorch.callbacks import ModelCheckpoint, TQDMProgressBar, LearningRateMonitor
+from lightning.pytorch.loggers import TensorBoardLogger
 
-class MutationDataset(Dataset):
-    def __init__(self, data_folder):
-        self.inputs = []
-        self.mutated = []
 
-        input_rooms_folder = os.path.join(os.path.dirname(data_folder), "InputRooms")
-        input_files = sorted([f for f in os.listdir(input_rooms_folder) if f.endswith(".bmp")])
+# -------------------------------------------------------------------
+# Padding 13×7 ↔ 16×8 für voll-conv
+# -------------------------------------------------------------------
+def pad_to_pow2(img: torch.Tensor, th: int = 16, tw: int = 8) -> torch.Tensor:
+    _, _, h, w = img.shape
+    return F.pad(img, (0, tw - w, 0, th - h), mode="replicate")
 
-        tboi_bitmap = TBoI_Bitmap()
+def unpad(img: torch.Tensor, h: int = 13, w: int = 7) -> torch.Tensor:
+    return img[..., :h, :w]
 
-        for input_file in input_files:
-            input_path = os.path.join(input_rooms_folder, input_file)
-            input_img = Image.open(input_path).convert("L")
-            input_arr = np.array(input_img)
-            input_arr = input_arr[1:-1, 1:-1]
 
-            for i in range(input_arr.shape[0]):
-                for j in range(input_arr.shape[1]):
-                    entity = tboi_bitmap.get_entity_id_with_pixel_value(input_arr[i, j])
-                    input_arr[i, j] = entity.value
+# -------------------------------------------------------------------
+# 1) Dataset für deine Ordnerstruktur
+# -------------------------------------------------------------------
+class NestedBmpDataset(Dataset):
+    def __init__(self, root: str | Path, split: str="train", split_ratio: float=0.9, seed: int=42):
+        self.src_dir = Path(root) / "Mutations"
+        self.dst_dir = Path(root) / "Inverted_Mutations"
 
-            input_arr = input_arr[np.newaxis, :, :]
+        pairs = []
+        for bmp_k in sorted(self.src_dir.iterdir()):
+            if not bmp_k.is_dir(): continue
+            for src in bmp_k.glob("mutation_*.bmp"):
+                stem = src.stem
+                tgt_dir = self.dst_dir / bmp_k.name / stem
+                if tgt_dir.is_dir():
+                    bmps = sorted(tgt_dir.glob("*.bmp"))
+                    if bmps:
+                        pairs.append((src, bmps[0]))
 
-            mutation_folder = os.path.join(data_folder,"Mutations", input_file.replace("bitmap_", "bitmap_").replace(".bmp", ""))
-            if not os.path.isdir(mutation_folder):
-                continue
-            mutation_files = [f for f in os.listdir(mutation_folder) if f.endswith(".bmp")]
-            for mfile in mutation_files:
-                mpath = os.path.join(mutation_folder, mfile)
-                mimg = Image.open(mpath).convert("L")
-                marr = np.array(mimg)
-                marr = marr[1:-1, 1:-1]
+        if not pairs:
+            raise RuntimeError("Keine Paare in Mutations/… gefunden")
 
-                for i in range(marr.shape[0]):
-                    for j in range(marr.shape[1]):
-                        entity = tboi_bitmap.get_entity_id_with_pixel_value(marr[i, j])
-                        marr[i, j] = entity.value
+        torch.manual_seed(seed)
+        idx = torch.randperm(len(pairs))
+        cut = int(len(pairs) * split_ratio)
+        sel = idx[:cut] if split=="train" else idx[cut:]
+        self.pairs = [pairs[i] for i in sel]
 
-                fitness_str = mfile.split("_")[-1].replace(".bmp", "").replace(",", ".")
-                try:
-                    fitness_val = float(fitness_str)
-                except ValueError:
-                    continue
-                
-                self.inputs.append(input_arr)
-                self.mutated.append(marr)
+        self.to_tensor = T.Compose([
+            lambda p: Image.open(p).convert("L"),
+            T.PILToTensor(),
+            lambda t: (t.float()/127.5) - 1.0,
+        ])
 
-        self.inputs = torch.tensor(np.stack(self.inputs), dtype=torch.float32)
-        self.mutated = torch.tensor(np.stack(self.mutated), dtype=torch.long)
+    def __len__(self): return len(self.pairs)
+    def __getitem__(self, i):
+        x, y = self.pairs[i]
+        return self.to_tensor(x), self.to_tensor(y)
 
-    def __len__(self):
-        return len(self.inputs)
 
-    def __getitem__(self, idx):
-        return self.inputs[idx], self.mutated[idx]
-
-class Generator(nn.Module):
-    def __init__(self):
+class BmpDataModule(LightningDataModule):
+    def __init__(self, data_dir: str, batch_size: int=64, num_workers: int=0, split_ratio: float=0.9):
         super().__init__()
-        self.model = nn.Sequential(
-            nn.Flatten(),
-            nn.Linear(13*7*2, 128),
-            nn.ReLU(),
-            nn.Linear(128, 13*7*NUM_CLASSES),
+        self.save_hyperparameters()
+
+    def setup(self, stage=None):
+        self.train_set = NestedBmpDataset(self.hparams.data_dir, "train", self.hparams.split_ratio)
+
+    def train_dataloader(self):
+        return DataLoader(self.train_set,
+                          batch_size=self.hparams.batch_size,
+                          shuffle=True,
+                          num_workers=self.hparams.num_workers,  # Auf 0 gesetzt
+                          pin_memory=True)
+
+    # ENTFERNE val_dataloader() komplett oder gib einen Dummy zurück
+    # def val_dataloader(self):
+    #     return None
+
+
+# -------------------------------------------------------------------
+# 2) Netz-Bausteine
+# -------------------------------------------------------------------
+def conv(in_c, out_c, k=3, s=1, p=1, norm=True, act=True):
+    layers = [nn.ReflectionPad2d(p), nn.Conv2d(in_c, out_c, k, s, 0, bias=not norm)]
+    if norm: layers.append(nn.InstanceNorm2d(out_c))
+    if act:  layers.append(nn.ReLU(inplace=True))
+    return nn.Sequential(*layers)
+
+
+class UNetGenerator(nn.Module):
+    def __init__(self, in_ch, out_ch, z_dim=128, nf=64):
+        super().__init__()
+        self.d1 = conv(in_ch, nf, 4, 2, 1)
+        self.d2 = conv(nf+z_dim, nf*2, 4, 2, 1)
+        self.d3 = conv(nf*2, nf*4, 4, 2, 1, norm=False, act=False)
+        self.u1 = nn.Sequential(nn.ConvTranspose2d(nf*4, nf*2, 4, 2, 1),
+                                nn.InstanceNorm2d(nf*2), nn.ReLU(True))
+        self.u2 = nn.Sequential(nn.ConvTranspose2d(nf*4, nf,   4, 2, 1),
+                                nn.InstanceNorm2d(nf),   nn.ReLU(True))
+        self.fin= nn.Sequential(nn.ConvTranspose2d(nf*2, out_ch, 4, 2, 1), nn.Tanh())
+        self.z_dim = z_dim
+
+    def forward(self, x, z):
+        d1 = self.d1(x)
+        B, _, H, W = d1.shape
+        z_img = z.view(B, self.z_dim, 1, 1).expand(-1, -1, H, W)
+        d2 = self.d2(torch.cat([d1, z_img], 1))
+        d3 = self.d3(d2)
+        u1 = self.u1(d3); u1 = torch.cat([u1, d2], 1)
+        u2 = self.u2(u1); u2 = torch.cat([u2, d1], 1)
+        return self.fin(u2)
+
+
+class PatchDiscriminator(nn.Module):
+    def __init__(self, in_ch, nf=64):
+        super().__init__()
+        self.net = nn.Sequential(
+            # Erste Layer: 16×8 → 8×4
+            conv(in_ch, nf, 4, 2, 1, norm=False),
+            # Zweite Layer: 8×4 → 4×2  
+            conv(nf, nf*2, 4, 2, 1),
+            # Dritte Layer: 4×2 → 2×1 (kleinere Kernel!)
+            conv(nf*2, nf*4, 3, 1, 1),  # 3×3 statt 4×4
+            # Final Layer: 2×1 → 1×1
+            nn.Conv2d(nf*4, 1, 2, 1, 0),  # 2×2 statt 4×4
         )
 
-    def forward(self, x, cond):
-        x = torch.cat([x, cond], dim=1)
-        x = x.view(x.size(0), -1)
-        x = self.model(x)
-        x = x.view(-1, NUM_CLASSES, 13, 7)
-        return x
+    def forward(self, x): return self.net(x)
 
-class Discriminator(nn.Module):
-    def __init__(self):
+
+class Encoder(nn.Module):
+    def __init__(self, in_ch, z_dim=128, nf=64):
         super().__init__()
-        self.model = nn.Sequential(
-            nn.Flatten(),
-            nn.Linear(2*13*7, 128),
-            nn.LeakyReLU(0.2),
-            nn.Linear(128, 1),
-            nn.Sigmoid(),
+        self.body = nn.Sequential(
+            conv(in_ch, nf, 4, 2, 1),
+            conv(nf, nf*2, 4, 2, 1),
+            conv(nf*2, nf*4, 4, 2, 1),
+            nn.AdaptiveAvgPool2d(1),
         )
+        self.mu     = nn.Linear(nf*4, z_dim)
+        self.logvar = nn.Linear(nf*4, z_dim)
 
-    def forward(self, cond, y):
-        x = torch.cat([cond, y], dim=1)
-        x = x.view(x.size(0), -1)
-        return self.model(x)
+    def forward(self, y):
+        h = self.body(y).view(y.size(0), -1)
+        return self.mu(h), self.logvar(h)
 
-def train_cgan():
-    dataset = MutationDataset("Bitmaps/")
-    dataloader = DataLoader(dataset, batch_size=32, shuffle=True)
 
-    G = Generator()
-    D = Discriminator()
-    l1_loss = nn.L1Loss()
-    bce_loss = nn.BCELoss()
-    optimizer_G = optim.Adam(G.parameters(), lr=0.0002)
-    optimizer_D = optim.Adam(D.parameters(), lr=0.0002)
+# -------------------------------------------------------------------
+# 3) Lightning-Modul mit Scheduler
+# -------------------------------------------------------------------
+class LitBicycleGAN(LightningModule):
+    def __init__(self, in_ch=1, z_dim=128, lr=2e-4,
+                 lambda_l1=10.0, lambda_kl=0.01,
+                 decay_start=200, total_epochs=400):
+        super().__init__()
+        self.save_hyperparameters()
+        self.G = UNetGenerator(in_ch, in_ch, z_dim)
+        self.D = PatchDiscriminator(in_ch*2)
+        self.E = Encoder(in_ch, z_dim)
+        self.automatic_optimization = False
 
-    for epoch in range(100):
-        use_adv = epoch >= 10
-        train_D = use_adv and (epoch % 5 == 0)
-        for input_bmp, mutated_bmp in dataloader:
-            input_bmp = input_bmp.float()
-            mutated_bmp = mutated_bmp.unsqueeze(1).float()
+    @staticmethod
+    def hinge(logits, real=True):
+        return F.relu(1.-logits).mean() if real else F.relu(1.+logits).mean()
 
-            if train_D:
-                optimizer_D.zero_grad()
-                real_labels = torch.ones(input_bmp.size(0), 1)
-                fake_labels = torch.zeros(input_bmp.size(0), 1)
+    @staticmethod
+    def kl(mu, logvar):
+        return 0.5 * torch.mean(torch.sum(mu**2 + torch.exp(logvar) - 1. - logvar, dim=1))
 
-                output_real = D(input_bmp, mutated_bmp)
-                loss_real = bce_loss(output_real, real_labels)
+    def training_step(self, batch, _):
+        x, y = batch
+        x_pad, y_pad = pad_to_pow2(x), pad_to_pow2(y)
+        opt_g, opt_d, opt_e = self.optimizers()
 
-                logits_fake = G(torch.zeros_like(input_bmp), input_bmp)
-                pred_fake = torch.argmax(logits_fake, dim=1).unsqueeze(1).float().permute(0, 1, 3, 2)
-                output_fake = D(input_bmp, pred_fake.detach())
-                loss_fake = bce_loss(output_fake, fake_labels)
+        mu, logvar = self.E(y_pad)
+        std        = torch.exp(0.5*logvar)
+        z_enc      = mu + torch.randn_like(std)*std
+        z_rand     = torch.randn_like(z_enc)
 
-                loss_D = (loss_real + loss_fake) / 2
-                loss_D.backward()
-                optimizer_D.step()
+        fake_enc  = self.G(x_pad, z_enc)
+        fake_rand = self.G(x_pad, z_rand)
 
-            optimizer_G.zero_grad()
-            logits_fake = G(torch.zeros_like(input_bmp), input_bmp)
-            pred_fake = torch.argmax(logits_fake, dim=1).unsqueeze(1).float().permute(0, 1, 3, 2)
-            probs = torch.softmax(logits_fake, dim=1)
-            expected = torch.sum(probs * torch.arange(NUM_CLASSES, device=probs.device).view(1, -1, 1, 1), dim=1, keepdim=True)
-            if expected.shape != mutated_bmp.shape:
-                if expected.shape[2] == mutated_bmp.shape[3] and expected.shape[3] == mutated_bmp.shape[2]:
-                    expected = expected.permute(0, 1, 3, 2)
-            l1 = l1_loss(expected, mutated_bmp)
-            if train_D:
-                output_fake = D(input_bmp, pred_fake)
-                adv_loss = bce_loss(output_fake, real_labels)
-                loss_G = adv_loss + 10 * l1
-            else:
-                loss_G = 10 * l1
-            loss_G.backward()
-            optimizer_G.step()
+        # D step
+        opt_d.zero_grad(set_to_none=True)
+        d_real = self.D(torch.cat([x_pad, y_pad],1))
+        d_fake = self.D(torch.cat([x_pad, fake_rand.detach()],1))
+        d_loss = self.hinge(d_real, True) + self.hinge(d_fake, False)
+        self.manual_backward(d_loss); opt_d.step()
 
-        if use_adv:
-            print(f"Epoch {epoch}: Loss_D={loss_D.item():.4f}, Loss_G={loss_G.item():.4f}")
-        else:
-            print(f"Epoch {epoch}: Loss_G={loss_G.item():.4f} (nur L1)")
+        # G+E step
+        opt_g.zero_grad(set_to_none=True); opt_e.zero_grad(set_to_none=True)
+        g_adv = self.hinge(self.D(torch.cat([x_pad, fake_rand],1)), True)
+        g_l1  = F.l1_loss(fake_enc, y_pad)
+        g_kl  = self.kl(mu, logvar)
+        g_loss= g_adv + self.hparams.lambda_l1*g_l1 + self.hparams.lambda_kl*g_kl
+        self.manual_backward(g_loss); opt_g.step(); opt_e.step()
 
-    with torch.no_grad():
-        logits = G(torch.zeros_like(input_bmp), input_bmp)
-        pred = torch.argmax(logits, dim=1)
-        os.makedirs("Bitmaps/GAN", exist_ok=True)
-        tboi_bitmap = TBoI_Bitmap(width=13, height=7)
-        for idx in range(pred.shape[0]):
-            arr = pred[idx].cpu().numpy()
-            img = TBoI_Bitmap(width=13, height=7)
-            for x in range(13):
-                for y in range(7):
-                    entity_id = EntityType(arr[x, y])
-                    pixel_value = tboi_bitmap.get_pixel_value_with_entity_id(entity_id)
-                    img.bitmap.putpixel((x, y), pixel_value)
-            img.save_bitmap_in_folder(idx, "Bitmaps/GAN")
+        self.log_dict({"d_loss": d_loss, "g_adv": g_adv, "g_l1": g_l1, "g_kl": g_kl},
+                      prog_bar=True)
+        self.log("lr", opt_g.param_groups[0]['lr'], prog_bar=True, logger=False)
 
-def objective(trial):
-    lr_g = trial.suggest_loguniform('lr_g', 1e-5, 2e-3)
-    lr_d = trial.suggest_loguniform('lr_d', 5e-3, 1e-2)
-    l1_weight = trial.suggest_float('l1_weight', 1, 2)
-    batch_size = trial.suggest_categorical('batch_size', [16, 64])
+    def configure_optimizers(self):
+        opt_g = torch.optim.Adam(self.G.parameters(), lr=self.hparams.lr,  betas=(0.5,0.999))
+        opt_d = torch.optim.Adam(self.D.parameters(), lr=self.hparams.lr*0.5, betas=(0.5,0.999))
+        opt_e = torch.optim.Adam(self.E.parameters(), lr=self.hparams.lr,  betas=(0.5,0.999))
 
-    dataset = MutationDataset("Bitmaps/")
-    dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=True)
+        def lr_lambda(epoch):
+            if epoch < self.hparams.decay_start: return 1.0
+            frac = (epoch - self.hparams.decay_start) / max(1, self.hparams.total_epochs - self.hparams.decay_start)
+            return 1.0 - frac
 
-    G = Generator()
-    D = Discriminator()
-    l1_loss = nn.L1Loss()
-    bce_loss = nn.BCELoss()
-    optimizer_G = optim.Adam(G.parameters(), lr=lr_g)
-    optimizer_D = optim.Adam(D.parameters(), lr=lr_d)
+        scheds = [torch.optim.lr_scheduler.LambdaLR(opt, lr_lambda)
+                  for opt in (opt_g, opt_d, opt_e)]
+        return [opt_g, opt_d, opt_e], [{"scheduler": s, "interval":"epoch"} for s in scheds]
 
-    best_val_loss = float('inf')
-    epoch_losses = []
+    @torch.no_grad()
+    def sample(self, x_np, z_seed: int|None=None):
+        if z_seed is not None: torch.manual_seed(z_seed)
+        x = torch.tensor(x_np).float().unsqueeze(0).to(self.device)
+        x_pad = pad_to_pow2(x)
+        z = torch.randn(1, self.hparams.z_dim, device=self.device)
+        return unpad(self.G(x_pad, z)).squeeze(0).cpu()
 
-    for epoch in range(50):
-        for input_bmp, mutated_bmp in dataloader:
-            input_bmp = input_bmp.float()
-            mutated_bmp = mutated_bmp.unsqueeze(1).float()
 
-            optimizer_D.zero_grad()
-            real_labels = torch.ones(input_bmp.size(0), 1)
-            fake_labels = torch.zeros(input_bmp.size(0), 1)
+# -------------------------------------------------------------------
+# 4) CLI: Trainer.fit mit datamodule=
+# -------------------------------------------------------------------
+def cli_main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--data_dir",          required=True)
+    parser.add_argument("--max_epochs",   type=int,   default=400)
+    parser.add_argument("--decay_start_epoch", type=int, default=200)
+    parser.add_argument("--batch_size",     type=int,   default=64)
+    parser.add_argument("--split_ratio",    type=float, default=0.9)
+    parser.add_argument("--seed",           type=int,   default=42)
+    parser.add_argument("--accelerator",    default="auto", choices=["cpu","gpu","auto"])
+    parser.add_argument("--devices",        default="auto")
+    args = parser.parse_args()
 
-            output_real = D(input_bmp, mutated_bmp)
-            loss_real = bce_loss(output_real, real_labels)
+    seed_everything(args.seed, workers=True)
 
-            logits_fake = G(torch.zeros_like(input_bmp), input_bmp)
-            pred_fake = torch.argmax(logits_fake, dim=1).unsqueeze(1).float().permute(0, 1, 3, 2)
-            output_fake = D(input_bmp, pred_fake.detach())
-            loss_fake = bce_loss(output_fake, fake_labels)
+    dm = BmpDataModule(args.data_dir, args.batch_size,
+                       num_workers=0, split_ratio=args.split_ratio)  # num_workers=0
+    model = LitBicycleGAN(in_ch=1,
+                          decay_start=args.decay_start_epoch,
+                          total_epochs=args.max_epochs)
 
-            loss_D = (loss_real + loss_fake) / 2
-            loss_D.backward()
-            optimizer_D.step()
+    ckpt_cb = ModelCheckpoint(save_last=True, save_top_k=3, monitor="g_l1", mode="min")
+    lr_cb   = LearningRateMonitor(logging_interval="epoch")
+    pbar_cb = TQDMProgressBar(refresh_rate=10)
+    tb_logger = TensorBoardLogger("tb_logs", name="tboi_gan", default_hp_metric=False)
 
-            optimizer_G.zero_grad()
-            logits_fake = G(torch.zeros_like(input_bmp), input_bmp)
-            pred_fake = torch.argmax(logits_fake, dim=1).unsqueeze(1).float().permute(0, 1, 3, 2)
-            probs = torch.softmax(logits_fake, dim=1)
-            expected = torch.sum(probs * torch.arange(NUM_CLASSES, device=probs.device).view(1, -1, 1, 1), dim=1, keepdim=True)
-            if expected.shape != mutated_bmp.shape:
-                if expected.shape[2] == mutated_bmp.shape[3] and expected.shape[3] == mutated_bmp.shape[2]:
-                    expected = expected.permute(0, 1, 3, 2)
-            l1 = l1_loss(expected, mutated_bmp)
-            adv_loss = bce_loss(D(input_bmp, pred_fake), real_labels)
-            loss_G = adv_loss + l1_weight * l1
-            loss_G.backward()
-            optimizer_G.step()
-
-        epoch_losses.append(loss_G.item())
-        trial.report(loss_G.item(), epoch)
-        if trial.should_prune():
-            raise optuna.TrialPruned()
-
-        if loss_G.item() < best_val_loss:
-            best_val_loss = loss_G.item()
-
-    epoch_losses.append(0)
-    epoch_losses.append(lr_d)
-    epoch_losses.append(lr_g)
-    epoch_losses.append(l1_weight)
-    epoch_losses.append(batch_size)
-    np.save(f"Optuna/GAN/optuna_trial_{trial.number}_losses.npy", np.array(epoch_losses))
-
-    return best_val_loss
+    trainer = Trainer(
+        accelerator=args.accelerator,
+        devices=args.devices,
+        max_epochs=args.max_epochs,
+        precision="16-mixed",
+        callbacks=[ckpt_cb, lr_cb, pbar_cb],
+        logger=tb_logger,
+        # ENTFERNE alle validation-bezogenen Parameter
+        # num_sanity_val_steps=0,    
+        # limit_val_batches=0,       
+    )
+    trainer.fit(model, datamodule=dm)
 
 if __name__ == "__main__":
-    study = optuna.create_study(direction='minimize')
-    study.optimize(objective, n_trials=200, n_jobs=8)
-    print("Beste Hyperparameter:", study.best_params)
+    cli_main()

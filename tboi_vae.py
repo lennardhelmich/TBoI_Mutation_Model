@@ -21,6 +21,9 @@ import torch.nn.functional as F
 from torch.utils.data import DataLoader, Dataset, random_split
 from tqdm.auto import tqdm
 
+import optuna
+from optuna.integration import PyTorchLightningPruningCallback
+
 # ---------------------------------------------------------------------------
 # 1  Konstanten
 # ---------------------------------------------------------------------------
@@ -48,21 +51,70 @@ class MutationDataset(Dataset):
         return self._pmap(arr)
 
     def _gather_pairs(self):
-        for in_bmp in sorted((self.root / "InputRooms").glob("bitmap_*.bmp")):
-            in_arr = self._load_bitmap(in_bmp)
-            mut_dir = self.root / "Mutations" / in_bmp.stem
-            if not mut_dir.is_dir():  continue
-            for mut_bmp in mut_dir.glob("*.bmp"):
-                mut_arr = self._load_bitmap(mut_bmp)
-                self.pairs.append((in_arr, mut_arr))
+        mutations_dir = self.root / "Mutations"
+        inverted_dir = self.root / "Inverted_Mutations"
+        
+        # Erstelle einen Index aller verfügbaren Inverted_Mutations einmal
+        print("Erstelle Index der Inverted_Mutations...")
+        inverted_index = {}
+        for bitmap_folder in inverted_dir.glob("bitmap_*"):
+            if not bitmap_folder.is_dir():
+                continue
+            for mutation_folder in bitmap_folder.glob("mutation_*"):
+                if not mutation_folder.is_dir():
+                    continue
+                # Finde die erste .bmp Datei in diesem Ordner
+                bmp_files = list(mutation_folder.glob("*.bmp"))
+                if bmp_files:
+                    key = f"{bitmap_folder.name}/{mutation_folder.name}"
+                    inverted_index[key] = sorted(bmp_files)[0]
+        
+        print(f"Index erstellt mit {len(inverted_index)} Inverted_Mutations")
+        
+        # Jetzt gehe durch alle Mutations und nutze den Index
+        processed = 0
+        for bitmap_folder in sorted(mutations_dir.glob("bitmap_*")):
+            if not bitmap_folder.is_dir():
+                continue
+                
+            print(f"Verarbeite Ordner: {bitmap_folder.name}")
+            mutation_files = list(bitmap_folder.glob("mutation_*.bmp"))
+            
+            for mutation_file in sorted(mutation_files):
+                # Nutze den Index statt glob
+                key = f"{bitmap_folder.name}/{mutation_file.stem}"
+                if key not in inverted_index:
+                    continue
+                    
+                inverted_file = inverted_index[key]
+                
+                try:
+                    # Lade beide Bitmaps
+                    mutation_arr = self._load_bitmap(mutation_file)
+                    inverted_arr = self._load_bitmap(inverted_file)
+                    
+                    # Füge das Paar hinzu
+                    self.pairs.append((mutation_arr, inverted_arr))
+                    processed += 1
+                    
+                    # Progress feedback
+                    if processed % 1000 == 0:
+                        print(f"  {processed} Paare verarbeitet...")
+                        
+                except Exception as e:
+                    print(f"Fehler beim Laden von {mutation_file} oder {inverted_file}: {e}")
+                    continue
+        
+        print(f"Fertig! {len(self.pairs)} Paare geladen.")
 
-    def __len__(self): return len(self.pairs)
+    def __len__(self): 
+        return len(self.pairs)
 
     def __getitem__(self, idx: int):
-        inp, tgt = self.pairs[idx]
+        mutation_arr, inverted_arr = self.pairs[idx]
         return (
-            torch.from_numpy(inp).unsqueeze(0).float(),
-            torch.from_numpy(tgt).long(),
+            torch.from_numpy(inverted_arr).unsqueeze(0).float(),  # Input: inverted_mutation
+            torch.from_numpy(mutation_arr).long(),                # Target: mutation
         )
 
 # ---------------------------------------------------------------------------
@@ -148,25 +200,30 @@ def compute_class_weights(dataset, cap=5.0) -> torch.Tensor:
 # 6  Training
 # ---------------------------------------------------------------------------
 def train(data_root: str | Path,
-          epochs: int = 80,
-          batch_size: int = 64,
-          lr: float = 3e-4,
-          latent_dim: int = 128,
-          beta_max: float = .5,     ### NEW/CHANGED
-          beta_warmup: int = 30,
-          val_split: float = .10,
-          out_dir: str | Path = "checkpoints",
-          weighted: bool = True):
+          epochs: int = 120,
+          batch_size: int = 32,
+          lr: float = 1e-3,
+          latent_dim: int = 64,
+          beta_max: float = 0.05,
+          beta_warmup: int = 60,
+          weighted: bool = False,      # Fehlender Parameter
+          out_dir: str = "checkpoints", # Fehlender Parameter
+          val_split: float = 0.2):     # Falls nicht definiert
+    
     out_dir = Path(out_dir); out_dir.mkdir(parents=True, exist_ok=True)
     torch.manual_seed(SEED); np.random.seed(SEED); random.seed(SEED)
-
+    
+    print("Start loading Dataset...")
     full_ds   = MutationDataset(data_root)
+    print("Finished loading Dataset.")
+    
     val_len   = int(len(full_ds)*val_split)
     train_len = len(full_ds) - val_len
     train_ds, val_ds = random_split(
         full_ds, [train_len, val_len],
         generator=torch.Generator().manual_seed(SEED)
     )
+    
     train_dl = DataLoader(train_ds, batch_size=batch_size, shuffle=True)
     val_dl   = DataLoader(val_ds,   batch_size=batch_size)
 
@@ -233,6 +290,307 @@ def train(data_root: str | Path,
             print(f"   ✅  Neues bestes Modell → {ckpt}")
 
 # ---------------------------------------------------------------------------
+# 6.5  Optuna Hyperparameter-Optimierung (Mit Logging)
+# ---------------------------------------------------------------------------
+def objective(trial):
+    """Optuna Objective Function für Hyperparameter-Optimierung"""
+    import os
+    import time
+    
+    trial_start_time = time.time()
+    
+    # GPU-Status und Trial-Info
+    print(f"\n{'='*60}")
+    print(f"🚀 TRIAL {trial.number} GESTARTET")
+    print(f"{'='*60}")
+    print(f"🔥 DEVICE: {DEVICE}")
+    if torch.cuda.is_available():
+        print(f"💻 GPU: {torch.cuda.get_device_name()}")
+        print(f"💾 VRAM Total: {torch.cuda.get_device_properties(0).total_memory / 1e9:.1f} GB")
+        print(f"💾 VRAM Frei: {(torch.cuda.get_device_properties(0).total_memory - torch.cuda.memory_allocated()) / 1e9:.1f} GB")
+    
+    # Hyperparameter-Vorschläge
+    lr = trial.suggest_loguniform('lr', 1e-5, 1e-2)
+    latent_dim = trial.suggest_categorical('latent_dim', [32, 64, 128, 256])
+    batch_size = trial.suggest_categorical('batch_size', [16, 32, 64, 128])
+    beta_max = trial.suggest_uniform('beta_max', 0.01, 0.2)
+    beta_warmup = trial.suggest_int('beta_warmup', 20, 80)
+    
+    print(f"📋 HYPERPARAMETER:")
+    print(f"   Learning Rate: {lr:.2e}")
+    print(f"   Latent Dim:    {latent_dim}")
+    print(f"   Batch Size:    {batch_size}")
+    print(f"   Beta Max:      {beta_max:.3f}")
+    print(f"   Beta Warmup:   {beta_warmup}")
+    print(f"{'='*60}")
+    
+    # Dataset laden
+    print("📁 Lade Dataset...")
+    full_ds = MutationDataset("Bitmaps")
+    val_len = int(len(full_ds) * 0.2)
+    train_len = len(full_ds) - val_len
+    train_ds, val_ds = random_split(
+        full_ds, [train_len, val_len],
+        generator=torch.Generator().manual_seed(SEED)
+    )
+    
+    train_dl = DataLoader(train_ds, batch_size=batch_size, shuffle=True)
+    val_dl = DataLoader(val_ds, batch_size=batch_size)
+    print(f"✅ Dataset geladen: {len(train_ds)} Train, {len(val_ds)} Val Samples")
+    
+    # Modell mit Trial-Parametern
+    print("🏗️  Erstelle Modell...")
+    model = ConvVAE(latent_dim=latent_dim).to(DEVICE)
+    opt = torch.optim.AdamW(model.parameters(), lr=lr, weight_decay=1e-4)
+    
+    # Modell-Info
+    total_params = sum(p.numel() for p in model.parameters())
+    print(f"🧠 Modell Parameter: {total_params:,}")
+    
+    best_val_loss = float('inf')
+    epochs = 30  # Weniger Epochen für Optuna
+    
+    print(f"🎯 Starte Training für {epochs} Epochen...")
+    epoch_times = []
+    
+    for ep in range(1, epochs + 1):
+        epoch_start = time.time()
+        model.train()
+        beta = beta_max * min(1.0, ep / beta_warmup)
+        
+        # Training
+        train_loss = 0.0
+        train_batches = 0
+        for x, y in train_dl:
+            x, y = x.to(DEVICE), y.to(DEVICE)
+            opt.zero_grad()
+            logits, mu, logvar = model(x)
+            loss, rec, kld = beta_vae_loss(logits, y, mu, logvar, beta=beta)
+            loss.backward()
+            torch.nn.utils.clip_grad_norm_(model.parameters(), 5.0)
+            opt.step()
+            train_loss += loss.item()
+            train_batches += 1
+        
+        # Validation
+        model.eval()
+        val_loss = 0.0
+        val_batches = 0
+        with torch.no_grad():
+            for x, y in val_dl:
+                x, y = x.to(DEVICE), y.to(DEVICE)
+                logits, mu, logvar = model(x)
+                vloss, _, _ = beta_vae_loss(logits, y, mu, logvar, beta=1.0)
+                val_loss += vloss.item()
+                val_batches += 1
+        
+        val_loss /= val_batches
+        train_loss /= train_batches
+        epoch_time = time.time() - epoch_start
+        epoch_times.append(epoch_time)
+        
+        # Progress Logging
+        if ep % 5 == 0 or ep == 1:
+            avg_epoch_time = np.mean(epoch_times)
+            remaining_time = avg_epoch_time * (epochs - ep)
+            print(f"📊 Epoche {ep:2d}/{epochs} | "
+                  f"Train: {train_loss:.4f} | Val: {val_loss:.4f} | "
+                  f"Beta: {beta:.3f} | Zeit: {epoch_time:.1f}s | "
+                  f"ETA: {remaining_time/60:.1f}min")
+        
+        # Optuna Reporting
+        trial.report(val_loss, ep)
+        
+        # Pruning (frühzeitiges Stoppen schlechter Trials)
+        if trial.should_prune():
+            print(f"✂️  Trial {trial.number} PRUNED nach Epoche {ep}")
+            raise optuna.TrialPruned()
+        
+        if val_loss < best_val_loss:
+            best_val_loss = val_loss
+            print(f"🎉 Neue beste Val-Loss: {best_val_loss:.6f}")
+        
+        # Früh stoppen wenn Loss explodiert
+        if val_loss > 10.0:
+            print(f"💥 Trial gestoppt - Loss explodiert: {val_loss:.2f}")
+            break
+    
+    trial_time = time.time() - trial_start_time
+    
+    # Trial-Zusammenfassung
+    print(f"\n{'='*60}")
+    print(f"📈 TRIAL {trial.number} ABGESCHLOSSEN")
+    print(f"{'='*60}")
+    print(f"⏱️  Gesamtzeit: {trial_time/60:.1f} Minuten")
+    print(f"🎯 Beste Val-Loss: {best_val_loss:.6f}")
+    print(f"📊 Finale Val-Loss: {val_loss:.6f}")
+    print(f"⚡ Epochen pro Minute: {epochs/(trial_time/60):.1f}")
+    
+    # Speichere Trial-Ergebnisse
+    os.makedirs("Optuna/VAE", exist_ok=True)
+    trial_results = {
+        'trial_number': trial.number,
+        'params': trial.params,
+        'best_val_loss': best_val_loss,
+        'final_val_loss': val_loss,
+        'trial_time_minutes': trial_time/60,
+        'epochs_completed': epochs
+    }
+    
+    np.save(f"Optuna/VAE/trial_{trial.number}_results.npy", trial_results)
+    
+    # GPU Cleanup
+    if torch.cuda.is_available():
+        torch.cuda.empty_cache()
+        print(f"🧹 GPU Memory bereinigt")
+    
+    print(f"{'='*60}\n")
+    
+    return best_val_loss
+
+def run_optuna_study(n_trials=50, n_jobs=1):
+    """Starte Optuna Hyperparameter-Suche mit verbessertem Logging"""
+    import os
+    import time
+    
+    study_start_time = time.time()
+    
+    print(f"\n{'🔬'*20}")
+    print(f"🚀 OPTUNA HYPERPARAMETER SEARCH")
+    print(f"{'🔬'*20}")
+    print(f"🎯 Trials geplant: {n_trials}")
+    print(f"⚡ Parallele Jobs: {n_jobs}")
+    print(f"🔥 Device: {DEVICE}")
+    print(f"📅 Startzeit: {time.strftime('%Y-%m-%d %H:%M:%S')}")
+    print(f"{'='*60}")
+    
+    # Erstelle oder lade Study
+    study_name = "tboi_vae_optimization"
+    storage = f"sqlite:///optuna_{study_name}.db"
+    
+    study = optuna.create_study(
+        study_name=study_name,
+        storage=storage,
+        direction='minimize',
+        load_if_exists=True,
+        pruner=optuna.pruners.MedianPruner(
+            n_startup_trials=5,
+            n_warmup_steps=10,
+            interval_steps=1
+        )
+    )
+    
+    # Zeige bisherige Trials (SAFE VERSION)
+    completed_trials = [t for t in study.trials if t.state == optuna.trial.TrialState.COMPLETE]
+    if len(completed_trials) > 0:
+        print(f"📋 Bestehende Study gefunden mit {len(study.trials)} Trials")
+        print(f"✅ Erfolgreich abgeschlossen: {len(completed_trials)}")
+        try:
+            print(f"🏆 Beste bisherige Loss: {study.best_value:.6f}")
+            print(f"📊 Beste Parameter: {study.best_params}")
+        except ValueError:
+            print(f"⚠️  Noch keine gültigen Ergebnisse in der Datenbank")
+        print(f"{'='*60}")
+    else:
+        print(f"📋 Neue Study wird erstellt - keine vorherigen Trials gefunden")
+        print(f"{'='*60}")
+    
+    # Fortschritts-Callback (SAFE VERSION)
+    def progress_callback(study, trial):
+        completed = len([t for t in study.trials if t.state == optuna.trial.TrialState.COMPLETE])
+        pruned = len([t for t in study.trials if t.state == optuna.trial.TrialState.PRUNED])
+        failed = len([t for t in study.trials if t.state == optuna.trial.TrialState.FAIL])
+        
+        print(f"\n📊 FORTSCHRITT UPDATE:")
+        print(f"   ✅ Abgeschlossen: {completed}")
+        print(f"   ✂️  Pruned: {pruned}")
+        print(f"   ❌ Fehler: {failed}")
+        
+        # Safe best value access
+        if completed > 0:
+            try:
+                print(f"   🏆 Aktuelle beste Loss: {study.best_value:.6f}")
+            except ValueError:
+                print(f"   🏆 Beste Loss: Noch keine gültigen Trials")
+        else:
+            print(f"   🏆 Beste Loss: Noch keine abgeschlossenen Trials")
+        
+        if completed > 0:
+            elapsed = time.time() - study_start_time
+            avg_time_per_trial = elapsed / (completed + pruned + failed)
+            remaining_trials = n_trials - (completed + pruned + failed)
+            eta = remaining_trials * avg_time_per_trial
+            print(f"   ⏱️  Durchschn. Zeit/Trial: {avg_time_per_trial/60:.1f}min")
+            print(f"   🎯 ETA: {eta/3600:.1f} Stunden")
+        print(f"{'='*60}")
+    
+    # Optimierung mit Callback
+    try:
+        study.optimize(objective, n_trials=n_trials, n_jobs=n_jobs, callbacks=[progress_callback])
+    except KeyboardInterrupt:
+        print(f"\n⚠️  Unterbrochen durch Benutzer!")
+    
+    study_time = time.time() - study_start_time
+    
+    # Finale Ergebnisse (SAFE VERSION)
+    completed_final = [t for t in study.trials if t.state == optuna.trial.TrialState.COMPLETE]
+    
+    print(f"\n{'🎉'*20}")
+    print(f"🏁 OPTUNA STUDIE ABGESCHLOSSEN")
+    print(f"{'🎉'*20}")
+    print(f"⏱️  Gesamtzeit: {study_time/3600:.1f} Stunden")
+    print(f"🎯 Trials durchgeführt: {len(study.trials)}")
+    print(f"✅ Erfolgreich: {len(completed_final)}")
+    print(f"✂️  Gepruned: {len([t for t in study.trials if t.state == optuna.trial.TrialState.PRUNED])}")
+    print(f"❌ Fehler: {len([t for t in study.trials if t.state == optuna.trial.TrialState.FAIL])}")
+    print(f"{'='*60}")
+    
+    # Safe best value access
+    if len(completed_final) > 0:
+        try:
+            print(f"🏆 BESTE VALIDIERUNGSLOSS: {study.best_value:.6f}")
+            print(f"📊 BESTE HYPERPARAMETER:")
+            for key, value in study.best_params.items():
+                print(f"   {key}: {value}")
+        except ValueError:
+            print(f"⚠️  Keine gültigen Trials für beste Parameter verfügbar")
+            # Zeige stattdessen den besten verfügbaren Trial
+            if completed_final:
+                best_trial = min(completed_final, key=lambda t: t.value)
+                print(f"🏆 BESTE VERFÜGBARE LOSS: {best_trial.value:.6f}")
+                print(f"📊 PARAMETER:")
+                for key, value in best_trial.params.items():
+                    print(f"   {key}: {value}")
+    else:
+        print(f"⚠️  Keine erfolgreichen Trials abgeschlossen!")
+    
+    print(f"{'='*60}")
+    
+    # Speichere finale Ergebnisse
+    os.makedirs("Optuna/VAE", exist_ok=True)
+    with open("Optuna/VAE/study_results.txt", "w") as f:
+        f.write(f"Optuna Study Results\n")
+        f.write(f"==================\n")
+        f.write(f"Study Time: {study_time/3600:.1f} hours\n")
+        f.write(f"Total Trials: {len(study.trials)}\n")
+        f.write(f"Completed Trials: {len(completed_final)}\n")
+        if len(completed_final) > 0:
+            try:
+                f.write(f"Best Loss: {study.best_value:.6f}\n")
+                f.write(f"Best Params: {study.best_params}\n")
+            except ValueError:
+                f.write(f"Best Loss: No valid trials\n")
+    
+    # Top 5 Trials anzeigen
+    if len(completed_final) >= 5:
+        print(f"🔝 TOP 5 TRIALS:")
+        sorted_trials = sorted(completed_final, key=lambda t: t.value)
+        for i, trial in enumerate(sorted_trials[:5]):
+            print(f"   {i+1}. Trial {trial.number}: {trial.value:.6f}")
+    
+    return study
+
+# ---------------------------------------------------------------------------
 # 7  Sampling  (unverändert)
 # ---------------------------------------------------------------------------
 @torch.no_grad()
@@ -262,17 +620,57 @@ def sample_random_rooms(ckpt_path: str|Path, n_samples=5, out_folder="samples"):
 def main():
     p = argparse.ArgumentParser("β-VAE für TBoI-Bitmaps")
     sub = p.add_subparsers(dest="cmd", required=True)
-    t = sub.add_parser("train"); t.add_argument("--data", default="Bitmaps")
+    
+    # Train subparser mit allen benötigten Argumenten
+    t = sub.add_parser("train")
+    t.add_argument("--data", default="Bitmaps")
     t.add_argument("--epochs", type=int, default=80)
     t.add_argument("--bs", type=int, default=64)
-    t.add_argument("--out", default="checkpoints")
-    s = sub.add_parser("sample"); s.add_argument("ckpt")
-    s.add_argument("--n", type=int, default=5); s.add_argument("--out", default="samples")
+    t.add_argument("--lr", type=float, default=3e-4)           # Neu hinzugefügt
+    t.add_argument("--latent_dim", type=int, default=128)      # Neu hinzugefügt
+    t.add_argument("--weighted", action="store_true")          # Neu hinzugefügt
+    t.add_argument("--out", default="./checkpoints")
+    
+    # Sample subparser (unverändert)
+    s = sub.add_parser("sample")
+    s.add_argument("ckpt")
+    s.add_argument("--n", type=int, default=5)
+    s.add_argument("--out", default="samples")
+    
+    # Neuer Optuna subparser
+    o = sub.add_parser("optuna")
+    o.add_argument("--trials", type=int, default=50, help="Anzahl Optuna Trials")
+    o.add_argument("--jobs", type=int, default=1, help="Parallele Jobs (1 für GPU)")
+    
     a = p.parse_args()
-    if a.cmd=="train":
-        train(a.data, epochs=a.epochs, batch_size=a.bs, out_dir=a.out)
-    else:
+    
+    if a.cmd == "train":
+        train(a.data, epochs=a.epochs, batch_size=a.bs, lr=a.lr, 
+              latent_dim=a.latent_dim, weighted=a.weighted, out_dir=a.out)
+    elif a.cmd == "sample":
         sample_random_rooms(a.ckpt, n_samples=a.n, out_folder=a.out)
+    elif a.cmd == "optuna":
+        print(f"🚀 Starte Optuna mit {a.trials} Trials und {a.jobs} Jobs")
+        study = run_optuna_study(n_trials=a.trials, n_jobs=a.jobs)
+        
+        # Optional: Trainiere bestes Modell (SAFE VERSION)
+        completed_trials = [t for t in study.trials if t.state == optuna.trial.TrialState.COMPLETE]
+        if len(completed_trials) > 0:
+            try:
+                print(f"\n🎯 Trainiere bestes Modell mit optimalen Hyperparametern...")
+                best_params = study.best_params
+                train("Bitmaps", 
+                      epochs=75, 
+                      batch_size=best_params['batch_size'],
+                      lr=best_params['lr'],
+                      latent_dim=best_params['latent_dim'],
+                      beta_max=best_params['beta_max'],
+                      beta_warmup=best_params['beta_warmup'],
+                      out_dir="./best_optuna_model")
+            except ValueError:
+                print(f"⚠️  Kann bestes Modell nicht trainieren - keine gültigen Parameter")
+        else:
+            print(f"⚠️  Keine erfolgreichen Trials gefunden!")
 
 # ---------------------------------------------------------------------------
 # 9  Stub, falls tboi_bitmap fehlt (unverändert)
