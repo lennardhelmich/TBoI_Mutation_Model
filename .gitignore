@@ -1,8 +1,17 @@
 XMLToBitmapConverter/.vscode
 .vscode
 __pycache__/*
+Bitmaps/Mutations_Extracted/*
+best_optuna_gan_model/*
 Bitmaps/InputRooms/*
 Bitmaps/PathfindingTest/*
+best_optuna_model/*
+MutationModelModVAE1/__pycache__/*
+MutationModelModVAE1/RoomEditor/__pycache__/*
+MutationModelModVAE1/RoomEditor/build/*
+MutationModelModVAE1/RoomEditor/.conda/*
+MutationModelModVAE1/RoomEditor/dist/*
+interpolations/*
 Bitmaps/Mutations/*
 Bitmaps/Inverted_Mutations/*
 tb_logs/*

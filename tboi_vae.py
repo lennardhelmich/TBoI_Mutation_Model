@@ -614,6 +614,181 @@ def sample_random_rooms(ckpt_path: str|Path, n_samples=5, out_folder="samples"):
         img.save_bitmap_in_folder(f"sample_{idx}", out)
         print(f"Sample {idx} gespeichert.")
 
+@torch.no_grad()
+def transform_bitmap(ckpt_path: str|Path, input_bitmap_path: str|Path, 
+                    output_name: str = "transformed", out_folder="samples"):
+    """Transformiere eine einzelne Input-Bitmap mit dem trainierten VAE"""
+    out = Path(out_folder)
+    out.mkdir(parents=True, exist_ok=True)
+    
+    # Lade trainiertes Modell
+    ckpt = torch.load(ckpt_path, map_location=DEVICE)
+    latent_dim = ckpt["args"]["latent_dim"]
+    model = ConvVAE(latent_dim=latent_dim).to(DEVICE)
+    model.load_state_dict(ckpt["model_state"])
+    model.eval()
+    
+    print(f"🔥 Modell geladen (Latent Dim: {latent_dim})")
+    print(f"📁 Input: {input_bitmap_path}")
+    
+    # Lade Input-Bitmap (15×9)
+    img = Image.open(input_bitmap_path).convert("L")
+    print(f"📏 Original size: {img.size}")
+    
+    # Crop borders: 15×9 → 13×7 (entferne 1px Rand)
+    arr = np.array(img)[1:-1, 1:-1]  # Remove 1px border on all sides
+    print(f"📏 After crop: {arr.shape} (sollte 7×13 sein)")
+    
+    # TBoI Bitmap Helper für Pixel → Entity Conversion
+    tboi = TBoI_Bitmap()
+    
+    # Convert Pixelwerte (0-255) zu Entity IDs (0-11)
+    pmap = np.vectorize(
+        lambda px: tboi.get_entity_id_with_pixel_value(px).value,
+        otypes=[np.uint8]
+    )
+    entity_arr = pmap(arr)
+    
+    print(f"🔢 Entity range: {entity_arr.min()}-{entity_arr.max()}")
+    print(f"🔢 Entity shape: {entity_arr.shape}")
+    
+    # Zu Tensor konvertieren (1, 1, 7, 13)
+    x = torch.from_numpy(entity_arr).unsqueeze(0).unsqueeze(0).float().to(DEVICE)
+    print(f"🔢 Input tensor shape: {x.shape}")
+    
+    # VAE Forward Pass: Encode → Sample → Decode
+    mu, logvar = model.encode(x)
+    z = model.reparameterize(mu, logvar)  # Sample aus gelernter Verteilung
+    output_logits = model.decode(z)       # (1, 12, 7, 13)
+    pred = torch.argmax(output_logits, dim=1)[0].cpu().numpy()  # (7, 13)
+    
+    print(f"📊 Latent stats: μ={mu.mean():.3f}±{mu.std():.3f}, logvar={logvar.mean():.3f}")
+    print(f"🎯 Output shape: {pred.shape}")
+    print(f"🎯 Output entity range: {pred.min()}-{pred.max()}")
+    
+    # Speichere transformierte Bitmap
+    save_transformed_bitmap(pred, output_name, out)
+    
+    print(f"✅ Transformierte Bitmap gespeichert: {out / f'{output_name}.bmp'}")
+    
+    return pred
+
+def save_transformed_bitmap(arr, name, out_folder):
+    """Speichere 7×13 Entity Array als 15×9 TBoI-Bitmap (mit Rand)"""
+    out_folder = Path(out_folder)
+    out_folder.mkdir(parents=True, exist_ok=True)
+    
+    # Erstelle 15×9 Bitmap
+    tboi = TBoI_Bitmap(width=15, height=9)
+    
+    # Fülle den Rand mit Entity 0 (EMPTY/WALL)
+    for x in range(15):
+        for y in range(9):
+            if x == 0 or x == 14 or y == 0 or y == 8:
+                # Rand: Setze Entity 0
+                ent = EntityType(0)
+            else:
+                # Innenbereich: Nutze predicted entities (7×13 in 15×9)
+                inner_y = y - 1  # 0-6
+                inner_x = x - 1  # 0-12
+                entity_id = int(arr[inner_y, inner_x])
+                ent = EntityType(entity_id)
+            
+            # Convert Entity zu Pixelwert
+            px = tboi.get_pixel_value_with_entity_id(ent)
+            tboi.bitmap.putpixel((x, y), px)
+    
+    # Speichere als BMP
+    output_path = out_folder / f"{name}.bmp"
+    tboi.bitmap.save(output_path)
+    print(f"💾 Bitmap gespeichert: {output_path}")
+
+@torch.no_grad()
+def transform_with_variations(ckpt_path, input_bitmap_path, n_variations=5, out_folder="variations"):
+    """Erzeuge mehrere Variationen derselben Input-Bitmap"""
+    # Lade Modell
+    ckpt = torch.load(ckpt_path, map_location=DEVICE)
+    model = ConvVAE(latent_dim=ckpt["args"]["latent_dim"]).to(DEVICE)
+    model.load_state_dict(ckpt["model_state"])
+    model.eval()
+    
+    # Lade Input
+    img = Image.open(input_bitmap_path).convert("L")
+    arr = np.array(img)[1:-1, 1:-1]  # Crop
+    
+    # Convert zu Entity IDs
+    tboi = TBoI_Bitmap()
+    pmap = np.vectorize(lambda px: tboi.get_entity_id_with_pixel_value(px).value)
+    entity_arr = pmap(arr)
+    x = torch.from_numpy(entity_arr).unsqueeze(0).unsqueeze(0).float().to(DEVICE)
+    
+    # Encode zu μ und σ
+    mu, logvar = model.encode(x)
+    
+    for i in range(n_variations):
+        # Sample verschiedene z-Vektoren aus der gelernten Verteilung
+        z = model.reparameterize(mu, logvar)  # Jedes Mal anders!
+        
+        # Decode
+        output_logits = model.decode(z)
+        pred = torch.argmax(output_logits, dim=1)[0].cpu().numpy()
+        
+        # Speichere
+        save_transformed_bitmap(pred, f"variation_{i}", out_folder)
+        print(f"✅ Variation {i} gespeichert")
+
+@torch.no_grad()
+def load_model(ckpt_path):
+    """Lade ein trainiertes VAE-Modell"""
+    ckpt = torch.load(ckpt_path, map_location=DEVICE)
+    latent_dim = ckpt["args"]["latent_dim"]
+    model = ConvVAE(latent_dim=latent_dim).to(DEVICE)
+    model.load_state_dict(ckpt["model_state"])
+    model.eval()
+    return model
+
+@torch.no_grad()
+def interpolate_between_bitmaps(ckpt_path, bitmap1_path, bitmap2_path, steps=5, out_folder="interpolations"):
+    """Interpoliere zwischen zwei Bitmaps im latent space"""
+    # Lade Modell (korrigiert)
+    model = load_model(ckpt_path)
+    
+    print(f"🔀 Interpoliere zwischen {bitmap1_path} und {bitmap2_path}")
+    
+    # Encode beide Bitmaps zu latent vectors
+    z1 = encode_bitmap_to_latent(model, bitmap1_path)  
+    z2 = encode_bitmap_to_latent(model, bitmap2_path)  
+    
+    out = Path(out_folder)
+    out.mkdir(parents=True, exist_ok=True)
+    
+    for i in range(steps):
+        # Linear interpolation
+        alpha = i / (steps - 1)
+        z_interp = (1 - alpha) * z1 + alpha * z2
+        
+        print(f"🎯 Schritt {i}: α={alpha:.2f}")
+        
+        # Decode interpolierten Vektor
+        output_logits = model.decode(z_interp)
+        pred = torch.argmax(output_logits, dim=1)[0].cpu().numpy()
+        
+        save_transformed_bitmap(pred, f"interp_{i:02d}_alpha_{alpha:.2f}", out_folder)
+    
+    print(f"✅ Interpolation abgeschlossen! {steps} Schritte in {out_folder}")
+
+def encode_bitmap_to_latent(model, bitmap_path):
+    """Hilfsfunktion: Bitmap → Latent Vector (korrigiert)"""
+    img = Image.open(bitmap_path).convert("L")
+    arr = np.array(img)[1:-1, 1:-1]
+    
+    tboi = TBoI_Bitmap()
+    pmap = np.vectorize(lambda px: tboi.get_entity_id_with_pixel_value(px).value)
+    entity_arr = pmap(arr)
+    x = torch.from_numpy(entity_arr).unsqueeze(0).unsqueeze(0).float().to(DEVICE)
+    
+    mu, logvar = model.encode(x)
+    return mu  # Nutze μ für deterministische Interpolation
 # ---------------------------------------------------------------------------
 # 8  CLI (kurz)
 # ---------------------------------------------------------------------------
@@ -642,6 +817,28 @@ def main():
     o.add_argument("--trials", type=int, default=50, help="Anzahl Optuna Trials")
     o.add_argument("--jobs", type=int, default=1, help="Parallele Jobs (1 für GPU)")
     
+    # Neuer Transform subparser
+    tr = sub.add_parser("transform")
+    tr.add_argument("ckpt", help="Pfad zum trainierten Modell")
+    tr.add_argument("--input", required=True, help="Input Bitmap oder Ordner")
+    tr.add_argument("--output", default="transformed", help="Output Name/Ordner")
+    tr.add_argument("--out_folder", default="samples", help="Output Verzeichnis")
+    tr.add_argument("--max_files", type=int, help="Max. Anzahl Dateien (für Ordner)")
+    
+    # Neuer Variationen subparser
+    var = sub.add_parser("variations")
+    var.add_argument("ckpt")
+    var.add_argument("--input", required=True)
+    var.add_argument("--n", type=int, default=5)
+    var.add_argument("--out", default="variations")
+
+    # Neuer Interpolation subparser
+    interp = sub.add_parser("interpolate") 
+    interp.add_argument("ckpt")
+    interp.add_argument("--input1", required=True)
+    interp.add_argument("--input2", required=True)
+    interp.add_argument("--steps", type=int, default=5)
+
     a = p.parse_args()
     
     if a.cmd == "train":
@@ -671,6 +868,20 @@ def main():
                 print(f"⚠️  Kann bestes Modell nicht trainieren - keine gültigen Parameter")
         else:
             print(f"⚠️  Keine erfolgreichen Trials gefunden!")
+    elif a.cmd == "transform":
+        input_path = Path(a.input)
+        if input_path.is_file():
+            # Einzelne Datei transformieren
+            transform_bitmap(a.ckpt, a.input, a.output, a.out_folder)
+        elif input_path.is_dir():
+            # Ganzen Ordner transformieren  
+            transform_folder(a.ckpt, a.input, a.out_folder, a.max_files)
+        else:
+            print(f"❌ Input nicht gefunden: {a.input}")
+    elif a.cmd == "variations":
+        transform_with_variations(a.ckpt, a.input, a.n, a.out)
+    elif a.cmd == "interpolate":
+        interpolate_between_bitmaps(a.ckpt, a.input1, a.input2, a.steps)
 
 # ---------------------------------------------------------------------------
 # 9  Stub, falls tboi_bitmap fehlt (unverändert)
@@ -692,3 +903,4 @@ except ImportError:                                     # pragma: no cover
 # ---------------------------------------------------------------------------
 if __name__ == "__main__":
     main()
+

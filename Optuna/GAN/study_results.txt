@@ -1,0 +1,7 @@
+GAN Optuna Study Results
+========================
+Study Time: 8.1 hours
+Total Trials: 702
+Completed Trials: 190
+Best G_L1 Loss: 0.067169
+Best Params: {'lr': 0.0016268907708071709, 'z_dim': 512, 'batch_size': 64, 'lambda_l1': 19.878960384981724, 'lambda_kl': 0.002126751745969114, 'd_suppress_thresh': 0.20083604059528093, 'r1_gamma': 0.00031999451637141154}
