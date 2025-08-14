@@ -93,10 +93,18 @@ class TBoI_Bitmap:
                     self.pathFindingGraph[y][x] = 1
 
 # Path Finding Algorithm (Breadth-First Search (BFS)) for fitness function
-    def is_path_existent(self, start, targets):
-        visited = set()
-        queue = deque([start])
-        remaining_targets = set(targets)
+    def is_path_existent(self, start, targets, visited_out=None, exhaustive=False):
+        """
+        Gibt True zurück, wenn ALLE targets vom Start aus erreichbar sind.
+        Wenn 'visited_out' ein Set ist, wird es mit allen besuchten Knoten gefüllt.
+        Ist 'exhaustive=True', läuft die BFS bis die Queue leer ist, selbst wenn
+        alle targets schon vorher gefunden wurden. So erhält man das komplette
+        Erreichbarkeits‑Set für weitere Auswertungen.
+        """
+        visited            = set()
+        queue              = deque([start])
+        remaining_targets  = set(targets)
+        found_all_targets  = False
 
         while queue:
             current = queue.popleft()
@@ -107,13 +115,19 @@ class TBoI_Bitmap:
             if current in remaining_targets:
                 remaining_targets.remove(current)
                 if not remaining_targets:
-                    return True
+                    found_all_targets = True
+                    if not exhaustive:
+                        if visited_out is not None:
+                            visited_out.update(visited)
+                        return True      # targets erreicht → fertig
 
             for neighbor in self.get_neighbors(current):
                 if neighbor not in visited and self.pathFindingGraph[neighbor[1]][neighbor[0]] == 0:
                     queue.append(neighbor)
 
-        return False
+        if visited_out is not None:
+            visited_out.update(visited)
+        return found_all_targets         # True, wenn alles gefunden wurde
 
     def get_all_neighbors(self, position):
         x, y = position

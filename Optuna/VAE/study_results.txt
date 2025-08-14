@@ -1,7 +1,0 @@
-Optuna Study Results
-==================
-Study Time: 7.6 hours
-Total Trials: 122
-Completed Trials: 70
-Best Loss: 0.342384
-Best Params: {'lr': 0.001876632239030483, 'latent_dim': 256, 'batch_size': 128, 'beta_max': 0.19216667110282803, 'beta_warmup': 22}

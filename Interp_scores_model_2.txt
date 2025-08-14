@@ -1,0 +1,161 @@
+--- GAN Scores ---
+Verbleibende Bitmaps: 910 (ignoriert: 90)
+Gesamtwert:
+  Mittelwert: 0.7389
+  Median:    0.7669
+  Min:       0.5012
+  Max:       0.9351
+  Std:       0.1004
+Balance:
+  Mittelwert: 0.5207
+  Median:    0.4945
+  Min:       0.0549
+  Max:       0.9890
+  Std:       0.2134
+Enemies:
+  Mittelwert: 0.6986
+  Median:    1.0000
+  Min:       0.0000
+  Max:       1.0000
+  Std:       0.3703
+Symmetry:
+  Mittelwert: 0.9338
+  Median:    0.9384
+  Min:       0.7920
+  Max:       1.0000
+  Std:       0.0406
+Variation:
+  Mittelwert: 0.6042
+  Median:    0.6181
+  Min:       0.3709
+  Max:       0.7610
+  Std:       0.0818
+Poop/Fire Reachability:
+  Mittelwert: 0.9849
+  Median:    1.0000
+  Min:       0.0000
+  Max:       1.0000
+  Std:       0.1145
+
+--- VAE Scores ---
+Verbleibende Bitmaps: 910 (ignoriert: 90)
+Gesamtwert:
+  Mittelwert: 0.7344
+  Median:    0.7645
+  Min:       0.5087
+  Max:       0.9276
+  Std:       0.1056
+Balance:
+  Mittelwert: 0.6303
+  Median:    0.6319
+  Min:       0.0824
+  Max:       0.9890
+  Std:       0.1962
+Enemies:
+  Mittelwert: 0.6363
+  Median:    0.7500
+  Min:       0.0000
+  Max:       1.0000
+  Std:       0.3991
+Symmetry:
+  Mittelwert: 0.9301
+  Median:    0.9325
+  Min:       0.8142
+  Max:       1.0000
+  Std:       0.0372
+Variation:
+  Mittelwert: 0.5585
+  Median:    0.5687
+  Min:       0.3681
+  Max:       0.7500
+  Std:       0.0727
+Poop/Fire Reachability:
+  Mittelwert: 0.9887
+  Median:    1.0000
+  Min:       0.0000
+  Max:       1.0000
+  Std:       0.0903
+
+--- Vergleich Gesamtwert ---
+Durchschnittlicher Unterschied (GAN - VAE, Gesamtwert): 0.0045
+
+--- GAN Scores ---
+Verbleibende Bitmaps: 898 (ignoriert: 102)
+Gesamtwert:
+  Mittelwert: 0.7415
+  Median:    0.7629
+  Min:       0.5154
+  Max:       0.9248
+  Std:       0.1030
+Balance:
+  Mittelwert: 0.7397
+  Median:    0.7692
+  Min:       0.2473
+  Max:       0.9890
+  Std:       0.1657
+Enemies:
+  Mittelwert: 0.6050
+  Median:    0.7500
+  Min:       0.0000
+  Max:       1.0000
+  Std:       0.3754
+Symmetry:
+  Mittelwert: 0.9194
+  Median:    0.9243
+  Min:       0.7445
+  Max:       1.0000
+  Std:       0.0453
+Variation:
+  Mittelwert: 0.5485
+  Median:    0.5577
+  Min:       0.3297
+  Max:       0.7198
+  Std:       0.0686
+Poop/Fire Reachability:
+  Mittelwert: 0.9822
+  Median:    1.0000
+  Min:       0.0000
+  Max:       1.0000
+  Std:       0.1216
+
+--- VAE Scores ---
+Verbleibende Bitmaps: 894 (ignoriert: 106)
+Gesamtwert:
+  Mittelwert: 0.7410
+  Median:    0.7686
+  Min:       0.5124
+  Max:       0.9269
+  Std:       0.1069
+Balance:
+  Mittelwert: 0.7728
+  Median:    0.7967
+  Min:       0.3297
+  Max:       0.9890
+  Std:       0.1448
+Enemies:
+  Mittelwert: 0.5853
+  Median:    0.7500
+  Min:       0.0000
+  Max:       1.0000
+  Std:       0.3981
+Symmetry:
+  Mittelwert: 0.9248
+  Median:    0.9302
+  Min:       0.7801
+  Max:       1.0000
+  Std:       0.0426
+Variation:
+  Mittelwert: 0.5331
+  Median:    0.5385
+  Min:       0.3764
+  Max:       0.6786
+  Std:       0.0621
+Poop/Fire Reachability:
+  Mittelwert: 0.9733
+  Median:    1.0000
+  Min:       0.0000
+  Max:       1.0000
+  Std:       0.1458
+
+--- Vergleich Gesamtwert ---
+Durchschnittlicher Unterschied (GAN - VAE, Gesamtwert): 0.0005

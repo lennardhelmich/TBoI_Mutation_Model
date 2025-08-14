@@ -1,0 +1,146 @@
+
+--- GAN Scores ---
+Verbleibende Bitmaps: 894 (ignoriert: 106)
+Gesamtwert:
+  Mittelwert: 0.8035
+  Median:    0.8209
+  Min:       0.5631
+  Max:       0.8951
+  Std:       0.0587
+Balance:
+  Mittelwert: 0.5711
+  Median:    0.6319
+  Min:       0.0000
+  Max:       0.9890
+  Std:       0.3097
+Enemies:
+  Mittelwert: 0.8694
+  Median:    1.0000
+  Min:       0.0000
+  Max:       1.0000
+  Std:       0.2087
+Symmetry:
+  Mittelwert: 0.9538
+  Median:    0.9589
+  Min:       0.8060
+  Max:       1.0000
+  Std:       0.0330
+Variation:
+  Mittelwert: 0.6147
+  Median:    0.6044
+  Min:       0.3654
+  Max:       0.8407
+  Std:       0.0979
+
+GAN: Anzahl functionValue[0] == 0: 0 von 894
+
+--- VAE Scores ---
+Verbleibende Bitmaps: 883 (ignoriert: 117)
+Gesamtwert:
+  Mittelwert: 0.8201
+  Median:    0.8330
+  Min:       0.5592
+  Max:       0.9046
+  Std:       0.0469
+Balance:
+  Mittelwert: 0.5952
+  Median:    0.6593
+  Min:       0.0000
+  Max:       0.9890
+  Std:       0.3033
+Enemies:
+  Mittelwert: 0.9187
+  Median:    1.0000
+  Min:       0.0000
+  Max:       1.0000
+  Std:       0.1648
+Symmetry:
+  Mittelwert: 0.9655
+  Median:    0.9736
+  Min:       0.7937
+  Max:       1.0000
+  Std:       0.0311
+Variation:
+  Mittelwert: 0.6025
+  Median:    0.5989
+  Min:       0.3654
+  Max:       0.8407
+  Std:       0.0989
+
+VAE: Anzahl functionValue[0] == 0: 0 von 883
+
+--- Vergleich Gesamtwert ---
+Durchschnittlicher Unterschied (GAN - VAE, Gesamtwert): -0.0166
+
+--- GAN Scores ---
+Verbleibende Bitmaps: 841 (ignoriert: 159)
+Gesamtwert:
+  Mittelwert: 0.7929
+  Median:    0.8079
+  Min:       0.5181
+  Max:       0.8976
+  Std:       0.0687
+Balance:
+  Mittelwert: 0.9041
+  Median:    0.9341
+  Min:       0.0549
+  Max:       0.9890
+  Std:       0.0879
+Enemies:
+  Mittelwert: 0.8338
+  Median:    1.0000
+  Min:       0.0000
+  Max:       1.0000
+  Std:       0.2237
+Symmetry:
+  Mittelwert: 0.9311
+  Median:    0.9384
+  Min:       0.7084
+  Max:       1.0000
+  Std:       0.0500
+Variation:
+  Mittelwert: 0.5306
+  Median:    0.5330
+  Min:       0.3544
+  Max:       0.7170
+  Std:       0.0570
+
+GAN: Anzahl functionValue[0] == 0: 0 von 841
+
+--- VAE Scores ---
+Verbleibende Bitmaps: 865 (ignoriert: 135)
+Gesamtwert:
+  Mittelwert: 0.8258
+  Median:    0.8387
+  Min:       0.5503
+  Max:       0.9076
+  Std:       0.0487
+Balance:
+  Mittelwert: 0.8864
+  Median:    0.9066
+  Min:       0.0275
+  Max:       0.9890
+  Std:       0.0976
+Enemies:
+  Mittelwert: 0.9012
+  Median:    1.0000
+  Min:       0.0000
+  Max:       1.0000
+  Std:       0.1689
+Symmetry:
+  Mittelwert: 0.9689
+  Median:    0.9795
+  Min:       0.8157
+  Max:       1.0000
+  Std:       0.0294
+Variation:
+  Mittelwert: 0.5394
+  Median:    0.5440
+  Min:       0.3571
+  Max:       0.7170
+  Std:       0.0553
+
+VAE: Anzahl functionValue[0] == 0: 0 von 865
+
+--- Vergleich Gesamtwert ---
+Durchschnittlicher Unterschied (GAN - VAE, Gesamtwert): -0.0329

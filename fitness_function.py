@@ -177,20 +177,21 @@ class Fitness_Function:
 
     def calc_fitness_function(self):
         value = 0
-        total_weight = Constants.FITNESS_WEIGHT_BALANCE + Constants.FITNESS_WEIGHT_CHANGES + Constants.FITNESS_WEIGHT_ENEMIES + Constants.FITNESS_WEIGHT_SYMMETRY + Constants.FITNESS_WEIGHT_VARIATION
+        # total_weight = Constants.FITNESS_WEIGHT_BALANCE + Constants.FITNESS_WEIGHT_CHANGES + Constants.FITNESS_WEIGHT_ENEMIES + Constants.FITNESS_WEIGHT_SYMMETRY + Constants.FITNESS_WEIGHT_VARIATION
+        total_weight = Constants.FITNESS_WEIGHT_BALANCE + Constants.FITNESS_WEIGHT_ENEMIES + Constants.FITNESS_WEIGHT_SYMMETRY + Constants.FITNESS_WEIGHT_VARIATION
         if(not self.check_every_traversability() ):
-            self.functionValue = [0, 0, 0, 0, 0, 0]
-        elif(not self.check_spawn()):
-            self.functionValue = [0, 0, 0, 0, 0, 0]
+            self.functionValue = [0, 0, 0, 0, 0]
+        # elif(not self.check_spawn()):
+        #     self.functionValue = [0, 0, 0, 0, 0, 0]
         else:
             balance = self.balance_freespace_and_entities()
-            bitmap_changes = self.bitmap_changes()
+            # bitmap_changes = self.bitmap_changes()
             enemies = self.enemy_difference_value()
             symmetry = self.symmetry_score()
             variation = self.pixel_variation_score()
             value = (
                 Constants.FITNESS_WEIGHT_BALANCE * balance
-                + Constants.FITNESS_WEIGHT_CHANGES * bitmap_changes
+                # + Constants.FITNESS_WEIGHT_CHANGES * bitmap_changes
                 + Constants.FITNESS_WEIGHT_ENEMIES * enemies
                 + Constants.FITNESS_WEIGHT_SYMMETRY * symmetry
                 + Constants.FITNESS_WEIGHT_VARIATION * variation
@@ -199,7 +200,7 @@ class Fitness_Function:
             self.functionValue = [
                 standardized_value,
                 balance,
-                bitmap_changes,
+                # bitmap_changes,
                 enemies,
                 symmetry,
                 variation]
